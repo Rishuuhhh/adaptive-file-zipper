@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adaptive File Zipper</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">⚡</div>
+            <h1>Adaptive File Zipper</h1>
+            <p class="subtitle">Smart compression that picks the best algorithm for your file</p>
+        </header>
+
+        <div class="card upload-card">
+            <div class="drop-zone" id="dropZone">
+                <div class="drop-icon">📁</div>
+                <p class="drop-text">Drop a file here or <label for="fileInput" class="browse-link">browse</label></p>
+                <p class="drop-hint">Any file type supported</p>
+                <input type="file" id="fileInput">
+            </div>
+            <div class="selected-file hidden" id="selectedFile">
+                <span class="file-icon">📄</span>
+                <span id="fileName">No file selected</span>
+            </div>
+
+            <div class="actions">
+                <button id="compressBtn" onclick="compressFile()" class="btn btn-primary">
+                    <span class="btn-icon">🗜️</span> Compress
+                </button>
+                <button id="decompressBtn" onclick="decompressFile()" class="btn btn-secondary">
+                    <span class="btn-icon">📂</span> Decompress
+                </button>
+            </div>
+        </div>
+
+        <div id="results" class="hidden">
+            <p id="error" class="hidden alert alert-error"></p>
+            <p id="status" class="hidden alert alert-success"></p>
+
+            <div id="stats" class="hidden">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Method</div>
+                        <div class="stat-value method-badge" id="method">—</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Entropy</div>
+                        <div class="stat-value" id="entropy">—</div>
+                        <div class="stat-hint">low = repetitive · high = random</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Adaptive Ratio</div>
+                        <div class="stat-value highlight" id="adaptive">—</div>
+                        <div class="stat-hint">compressed / original size</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Huffman Ratio</div>
+                        <div class="stat-value" id="huffman">—</div>
+                        <div class="stat-hint">standard huffman baseline</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Time</div>
+                        <div class="stat-value" id="time">—</div>
+                    </div>
+                </div>
+
+                <a id="downloadLink" class="hidden btn btn-download" target="_blank">
+                    <span>⬇️</span> Download Compressed File
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

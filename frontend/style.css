@@ -1,0 +1,273 @@
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0a0f1e;
+    color: #e2e8f0;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 16px 60px;
+}
+
+.container {
+    width: 100%;
+    max-width: 680px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+/* ── Header ── */
+header {
+    text-align: center;
+    padding: 8px 0 4px;
+}
+
+.logo {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+}
+
+h1 {
+    font-size: 1.9rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #60a5fa, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+}
+
+.subtitle {
+    color: #64748b;
+    font-size: 0.95rem;
+}
+
+/* ── Card ── */
+.card {
+    background: #111827;
+    border: 1px solid #1e293b;
+    border-radius: 16px;
+    padding: 28px;
+}
+
+/* ── Drop zone ── */
+.drop-zone {
+    border: 2px dashed #1e293b;
+    border-radius: 12px;
+    padding: 36px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.drop-zone:hover,
+.drop-zone.drag-over {
+    border-color: #60a5fa;
+    background: #0f172a;
+}
+
+.drop-icon {
+    font-size: 2.2rem;
+    margin-bottom: 10px;
+}
+
+.drop-text {
+    color: #94a3b8;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+
+.browse-link {
+    color: #60a5fa;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.drop-hint {
+    color: #475569;
+    font-size: 0.8rem;
+}
+
+#fileInput {
+    display: none;
+}
+
+/* ── Selected file ── */
+.selected-file {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 10px 14px;
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    color: #94a3b8;
+    word-break: break-all;
+}
+
+.file-icon {
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+/* ── Actions ── */
+.actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+/* ── Buttons ── */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 22px;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    text-decoration: none;
+}
+
+.btn:hover:not(:disabled) {
+    opacity: 0.88;
+    transform: translateY(-1px);
+}
+
+.btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    color: #fff;
+    flex: 1;
+}
+
+.btn-secondary {
+    background: #1e293b;
+    color: #94a3b8;
+    flex: 1;
+    border: 1px solid #334155;
+}
+
+.btn-download {
+    display: flex;
+    width: 100%;
+    margin-top: 20px;
+    background: #0f172a;
+    color: #60a5fa;
+    border: 1px solid #1e3a5f;
+    border-radius: 10px;
+    padding: 12px 20px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    justify-content: center;
+    gap: 8px;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.btn-download:hover {
+    background: #1e3a5f;
+    border-color: #60a5fa;
+}
+
+/* ── Alerts ── */
+.alert {
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.alert-error {
+    background: #1f0a0a;
+    border: 1px solid #7f1d1d;
+    color: #fca5a5;
+}
+
+.alert-success {
+    background: #052e16;
+    border: 1px solid #14532d;
+    color: #86efac;
+}
+
+/* ── Stats grid ── */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+.stats-grid .stat-card:first-child {
+    grid-column: 1 / -1;
+}
+
+.stat-card {
+    background: #111827;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    padding: 16px 18px;
+}
+
+.stat-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #475569;
+    margin-bottom: 6px;
+}
+
+.stat-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #e2e8f0;
+}
+
+.stat-value.highlight {
+    color: #4ade80;
+}
+
+.stat-hint {
+    font-size: 0.75rem;
+    color: #475569;
+    margin-top: 4px;
+}
+
+/* ── Method badge ── */
+.method-badge {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    background: #1e293b;
+    color: #a78bfa;
+    border: 1px solid #4c1d95;
+}
+
+/* ── Hidden ── */
+.hidden {
+    display: none !important;
+}
