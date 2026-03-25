@@ -1,10 +1,3 @@
-// Feature: adaptive-file-zipper, Property 1: RLE selected for high repeat density
-// Feature: adaptive-file-zipper, Property 2: BLOCK_HUFFMAN selected for low repeat density and low entropy
-// Feature: adaptive-file-zipper, Property 3: NONE selected for near-random data
-// Feature: adaptive-file-zipper, Property 12: huffmanRatio formula correctness
-// Feature: adaptive-file-zipper, Property 13: adaptiveRatio formula correctness
-// Feature: adaptive-file-zipper, Property 14: Full compression-decompression pipeline round-trip
-
 #include <gtest/gtest.h>
 #include <rapidcheck.h>
 #include <rapidcheck/gtest.h>
@@ -18,136 +11,98 @@
 #include <cmath>
 #include <algorithm>
 
-// Helper: compute repeat density the same way controller.cpp does
-static double computeRepeatDensity(const std::string &s) {
+// repeat density nikalo — kitne adjacent pairs same hain
+static double repDens(const std::string &s) {
     if (s.size() < 2) return 0.0;
-    size_t runRepeats = 0;
-    for (size_t i = 1; i < s.size(); ++i) {
-        if (s[i] == s[i - 1]) runRepeats++;
-    }
-    return static_cast<double>(runRepeats) / s.size();
+    size_t rr = 0;
+    for (size_t i = 1; i < s.size(); i++)
+        if (s[i] == s[i-1]) rr++;
+    return (double)rr / s.size();
 }
 
-// Property 1: RLE is selected for high repeat density
-// Validates: Requirements 1.1
-RC_GTEST_PROP(Controller, RLESelectedForHighRepeatDensity, ()) {
-    // Generate a char and a count > 3, repeat the char count times.
-    // This guarantees repeatDensity = (count-1)/count > 0.35 for count > 3.
+// zyada repeat wale data pe RLE choose hona chahiye
+RC_GTEST_PROP(Controller, RLEForHighRepeat, ()) {
     char c = *rc::gen::arbitrary<char>();
-    int count = *rc::gen::inRange<int>(4, 200);
-    std::string input(count, c);
-
-    // Sanity: verify repeatDensity > 0.35
-    RC_ASSERT(computeRepeatDensity(input) > 0.35);
-
-    auto result = runAdaptiveCompression(input);
-    RC_ASSERT(result.method == "RLE");
+    int cnt = *rc::gen::inRange<int>(4, 200);
+    std::string in(cnt, c);
+    RC_ASSERT(repDens(in) > 0.35);
+    auto r = runAdaptiveCompression(in);
+    RC_ASSERT(r.method == "RLE");
 }
 
-// Property 2: BLOCK_HUFFMAN is selected for low repeat density and low entropy
-// Validates: Requirements 1.2
-RC_GTEST_PROP(Controller, BlockHuffmanSelectedForLowRepeatDensityAndLowEntropy, ()) {
-    // Generate strings from a small alphabet (4-8 distinct chars) with no adjacent repeats.
-    // This keeps repeatDensity = 0 and entropy low (log2(4..8) = 2..3 bits).
-    int alphabetSize = *rc::gen::inRange<int>(4, 9);
-    int length = *rc::gen::inRange<int>(2, 100);
+// kam repeat aur kam entropy pe BLOCK_HUFFMAN aana chahiye
+RC_GTEST_PROP(Controller, BlockHuffmanForLowRepeatLowEntropy, ()) {
+    int al = *rc::gen::inRange<int>(4, 9);
+    int len = *rc::gen::inRange<int>(2, 100);
 
-    // Build alphabet of distinct printable chars
-    std::string alphabet;
-    for (int i = 0; i < alphabetSize; ++i) {
-        alphabet += static_cast<char>('a' + i);
-    }
+    std::string alpha;
+    for (int i = 0; i < al; i++) alpha += (char)('a' + i);
 
-    // Build string with no adjacent repeats by picking chars != previous
-    std::string input;
-    input.reserve(length);
+    std::string in;
+    in.reserve(len);
     char prev = '\0';
-    for (int i = 0; i < length; ++i) {
-        // Pick a random index in alphabet that differs from prev
-        int idx = *rc::gen::inRange<int>(0, alphabetSize);
-        char ch = alphabet[idx];
-        // If same as prev, shift to next in alphabet
-        if (ch == prev && alphabetSize > 1) {
-            ch = alphabet[(idx + 1) % alphabetSize];
-        }
-        input += ch;
+    for (int i = 0; i < len; i++) {
+        int idx = *rc::gen::inRange<int>(0, al);
+        char ch = alpha[idx];
+        if (ch == prev && al > 1) ch = alpha[(idx + 1) % al];
+        in += ch;
         prev = ch;
     }
 
-    double rd = computeRepeatDensity(input);
-    double ent = calculateEntropy(input);
-
+    double rd = repDens(in);
+    double ent = calculateEntropy(in);
     RC_PRE(rd <= 0.35 && ent < 7.5);
 
-    auto result = runAdaptiveCompression(input);
-    RC_ASSERT(result.method == "BLOCK_HUFFMAN");
+    auto r = runAdaptiveCompression(in);
+    RC_ASSERT(r.method == "BLOCK_HUFFMAN");
 }
 
-// Property 3: NONE is selected for near-random data
-// Validates: Requirements 1.3, 6.3
-RC_GTEST_PROP(Controller, NoneSelectedForNearRandomData, ()) {
-    // Generate strings using all 256 byte values with roughly equal frequency.
-    // Use a length that is a multiple of 256 to ensure uniform distribution.
-    int repeats = *rc::gen::inRange<int>(1, 5);
-    int length = 256 * repeats;
+// near-random data pe NONE aana chahiye
+RC_GTEST_PROP(Controller, NoneForRandomData, ()) {
+    int rep = *rc::gen::inRange<int>(1, 5);
+    int len = 256 * rep;
 
-    std::string input;
-    input.reserve(length);
-    for (int r = 0; r < repeats; ++r) {
-        for (int i = 0; i < 256; ++i) {
-            input += static_cast<char>(i);
-        }
-    }
+    std::string in;
+    in.reserve(len);
+    for (int r = 0; r < rep; r++)
+        for (int i = 0; i < 256; i++)
+            in += (char)i;
 
-    double rd = computeRepeatDensity(input);
-    double ent = calculateEntropy(input);
-
+    double rd = repDens(in);
+    double ent = calculateEntropy(in);
     RC_PRE(rd <= 0.35 && ent >= 7.5);
 
-    auto result = runAdaptiveCompression(input);
-    RC_ASSERT(result.method == "NONE");
-    RC_ASSERT(result.adaptiveRatio == 1.0);
+    auto r = runAdaptiveCompression(in);
+    RC_ASSERT(r.method == "NONE");
+    RC_ASSERT(r.adaptiveRatio == 1.0);
 }
 
-// Property 12: huffmanRatio formula correctness
-// Validates: Requirements 6.1
-RC_GTEST_PROP(Controller, HuffmanRatioFormulaCorrectness, ()) {
-    auto input = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
-
-    auto result = runAdaptiveCompression(input);
-
-    std::string huffBits = huffmanCompress(input);
-    double expected = static_cast<double>(huffBits.size()) / (input.size() * 8.0);
-
-    RC_ASSERT(std::abs(result.huffmanRatio - expected) < 1e-9);
+// huffmanRatio formula sahi hona chahiye
+RC_GTEST_PROP(Controller, HuffmanRatioCorrect, ()) {
+    auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
+    auto r = runAdaptiveCompression(in);
+    std::string hb = huffmanCompress(in);
+    double exp = (double)hb.size() / (in.size() * 8.0);
+    RC_ASSERT(std::abs(r.huffmanRatio - exp) < 1e-9);
 }
 
-// Property 13: adaptiveRatio formula correctness
-// Validates: Requirements 6.2
-RC_GTEST_PROP(Controller, AdaptiveRatioFormulaCorrectness, ()) {
-    auto input = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
+// adaptiveRatio formula sahi hona chahiye
+RC_GTEST_PROP(Controller, AdaptiveRatioCorrect, ()) {
+    auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
+    auto r = runAdaptiveCompression(in);
+    RC_PRE(r.method != "NONE");
 
-    auto result = runAdaptiveCompression(input);
+    std::string meth, cms, pay;
+    double ent;
+    unpackData(r.compressedData, meth, ent, cms, pay);
 
-    RC_PRE(result.method != "NONE");
-
-    // Unpack the compressedData to extract the payload
-    std::string method, codeMapSerialized, payload;
-    double entropy;
-    unpackData(result.compressedData, method, entropy, codeMapSerialized, payload);
-
-    double expected = static_cast<double>(payload.size()) / static_cast<double>(input.size());
-
-    RC_ASSERT(std::abs(result.adaptiveRatio - expected) < 1e-9);
+    double exp = (double)pay.size() / (double)in.size();
+    RC_ASSERT(std::abs(r.adaptiveRatio - exp) < 1e-9);
 }
 
-// Property 14: Full compression-decompression pipeline round-trip
-// Validates: Requirements 7.1, 7.2, 7.3
-RC_GTEST_PROP(Controller, FullCompressionDecompressionRoundTrip, ()) {
-    auto input = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
-
-    auto result = runAdaptiveCompression(input);
-    std::string recovered = runDecompression(result.compressedData);
-
-    RC_ASSERT(recovered == input);
+// compress -> decompress wapas original dena chahiye
+RC_GTEST_PROP(Controller, RoundTrip, ()) {
+    auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
+    auto r = runAdaptiveCompression(in);
+    RC_ASSERT(runDecompression(r.compressedData) == in);
 }

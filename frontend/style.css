@@ -5,94 +5,108 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #0a0f1e;
-    color: #e2e8f0;
+    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #fdf6ff;
+    color: #4a3f5c;
     min-height: 100vh;
     display: flex;
     align-items: flex-start;
     justify-content: center;
     padding: 40px 16px 60px;
+    background-image:
+        radial-gradient(circle at 20% 20%, #fce4f3 0%, transparent 40%),
+        radial-gradient(circle at 80% 80%, #e4eeff 0%, transparent 40%),
+        radial-gradient(circle at 60% 10%, #e8fce4 0%, transparent 30%);
 }
 
 .container {
     width: 100%;
-    max-width: 680px;
+    max-width: 660px;
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 22px;
 }
 
-/* ── Header ── */
+/* header */
 header {
     text-align: center;
     padding: 8px 0 4px;
 }
 
 .logo {
-    font-size: 2.5rem;
-    margin-bottom: 10px;
+    font-size: 2.8rem;
+    margin-bottom: 8px;
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50%       { transform: translateY(-6px); }
 }
 
 h1 {
-    font-size: 1.9rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, #60a5fa, #a78bfa);
+    font-size: 2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #d48bca, #8baee8);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 .subtitle {
-    color: #64748b;
+    color: #9b8aad;
     font-size: 0.95rem;
+    font-weight: 600;
 }
 
-/* ── Card ── */
+/* card base */
 .card {
-    background: #111827;
-    border: 1px solid #1e293b;
-    border-radius: 16px;
-    padding: 28px;
+    background: #fff;
+    border: 1.5px solid #f0e6f8;
+    border-radius: 20px;
+    padding: 26px;
+    box-shadow: 0 4px 24px rgba(180, 140, 210, 0.1);
 }
 
-/* ── Drop zone ── */
+/* drop zone */
 .drop-zone {
-    border: 2px dashed #1e293b;
-    border-radius: 12px;
+    border: 2px dashed #e0c8f0;
+    border-radius: 14px;
     padding: 36px 20px;
     text-align: center;
     cursor: pointer;
     transition: border-color 0.2s, background 0.2s;
+    background: #fdf8ff;
 }
 
 .drop-zone:hover,
 .drop-zone.drag-over {
-    border-color: #60a5fa;
-    background: #0f172a;
+    border-color: #c89ee0;
+    background: #f8eeff;
 }
 
 .drop-icon {
-    font-size: 2.2rem;
+    font-size: 2.4rem;
     margin-bottom: 10px;
 }
 
 .drop-text {
-    color: #94a3b8;
+    color: #9b8aad;
     font-size: 0.95rem;
+    font-weight: 600;
     margin-bottom: 4px;
 }
 
 .browse-link {
-    color: #60a5fa;
+    color: #c07ad4;
     cursor: pointer;
     text-decoration: underline;
     text-underline-offset: 2px;
 }
 
 .drop-hint {
-    color: #475569;
+    color: #c4b0d4;
     font-size: 0.8rem;
 }
 
@@ -100,19 +114,20 @@ h1 {
     display: none;
 }
 
-/* ── Selected file ── */
+/* selected file */
 .selected-file {
     display: flex;
     align-items: center;
     gap: 10px;
     margin-top: 14px;
     padding: 10px 14px;
-    background: #0f172a;
-    border: 1px solid #1e293b;
-    border-radius: 8px;
+    background: #fdf4ff;
+    border: 1.5px solid #f0ddf8;
+    border-radius: 10px;
     font-size: 0.9rem;
-    color: #94a3b8;
+    color: #9b8aad;
     word-break: break-all;
+    font-weight: 600;
 }
 
 .file-icon {
@@ -120,14 +135,14 @@ h1 {
     flex-shrink: 0;
 }
 
-/* ── Actions ── */
+/* actions */
 .actions {
     display: flex;
     gap: 12px;
     margin-top: 20px;
 }
 
-/* ── Buttons ── */
+/* buttons */
 .btn {
     display: inline-flex;
     align-items: center;
@@ -135,17 +150,19 @@ h1 {
     gap: 8px;
     padding: 11px 22px;
     border: none;
-    border-radius: 10px;
+    border-radius: 12px;
     font-size: 0.95rem;
-    font-weight: 600;
+    font-weight: 700;
     cursor: pointer;
-    transition: opacity 0.15s, transform 0.1s;
+    transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
     text-decoration: none;
+    font-family: 'Nunito', sans-serif;
 }
 
 .btn:hover:not(:disabled) {
-    opacity: 0.88;
-    transform: translateY(-1px);
+    opacity: 0.9;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(180, 130, 210, 0.25);
 }
 
 .btn:active:not(:disabled) {
@@ -153,65 +170,66 @@ h1 {
 }
 
 .btn:disabled {
-    opacity: 0.45;
+    opacity: 0.5;
     cursor: not-allowed;
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    background: linear-gradient(135deg, #e0a0d8, #a8c0f0);
     color: #fff;
     flex: 1;
+    box-shadow: 0 4px 14px rgba(180, 130, 210, 0.3);
 }
 
 .btn-secondary {
-    background: #1e293b;
-    color: #94a3b8;
+    background: #f5eeff;
+    color: #a07ac0;
     flex: 1;
-    border: 1px solid #334155;
+    border: 1.5px solid #e8d4f8;
 }
 
 .btn-download {
     display: flex;
     width: 100%;
-    margin-top: 20px;
-    background: #0f172a;
-    color: #60a5fa;
-    border: 1px solid #1e3a5f;
-    border-radius: 10px;
+    margin-top: 18px;
+    background: linear-gradient(135deg, #d4eeff, #e8d4ff);
+    color: #7a90d4;
+    border: 1.5px solid #c8dcf8;
+    border-radius: 12px;
     padding: 12px 20px;
     font-size: 0.95rem;
-    font-weight: 600;
+    font-weight: 700;
     justify-content: center;
     gap: 8px;
-    transition: background 0.2s, border-color 0.2s;
+    transition: box-shadow 0.2s, transform 0.1s;
 }
 
 .btn-download:hover {
-    background: #1e3a5f;
-    border-color: #60a5fa;
+    box-shadow: 0 6px 18px rgba(130, 160, 220, 0.25);
+    transform: translateY(-2px);
 }
 
-/* ── Alerts ── */
+/* alerts */
 .alert {
     padding: 12px 16px;
-    border-radius: 10px;
+    border-radius: 12px;
     font-size: 0.9rem;
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .alert-error {
-    background: #1f0a0a;
-    border: 1px solid #7f1d1d;
-    color: #fca5a5;
+    background: #fff0f4;
+    border: 1.5px solid #f8c8d4;
+    color: #c0607a;
 }
 
 .alert-success {
-    background: #052e16;
-    border: 1px solid #14532d;
-    color: #86efac;
+    background: #f0fff6;
+    border: 1.5px solid #b8f0d0;
+    color: #50a878;
 }
 
-/* ── Stats grid ── */
+/* stats grid */
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -223,51 +241,77 @@ h1 {
 }
 
 .stat-card {
-    background: #111827;
-    border: 1px solid #1e293b;
-    border-radius: 12px;
+    border-radius: 14px;
     padding: 16px 18px;
+    border: 1.5px solid transparent;
+}
+
+/* pastel card colours */
+.card-purple {
+    background: #f5eeff;
+    border-color: #e4d0f8;
+}
+
+.card-pink {
+    background: #fff0f8;
+    border-color: #f8d4ec;
+}
+
+.card-mint {
+    background: #f0fff8;
+    border-color: #c8f0e0;
+}
+
+.card-blue {
+    background: #f0f6ff;
+    border-color: #c8dcf8;
+}
+
+.card-peach {
+    background: #fff8f0;
+    border-color: #f8e4c8;
 }
 
 .stat-label {
-    font-size: 0.75rem;
-    font-weight: 600;
+    font-size: 0.72rem;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: #475569;
+    letter-spacing: 0.07em;
+    color: #b8a8cc;
     margin-bottom: 6px;
 }
 
 .stat-value {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #e2e8f0;
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: #5a4a6c;
 }
 
 .stat-value.highlight {
-    color: #4ade80;
+    color: #50b878;
 }
 
 .stat-hint {
-    font-size: 0.75rem;
-    color: #475569;
+    font-size: 0.74rem;
+    color: #c4b0d4;
     margin-top: 4px;
+    font-weight: 600;
 }
 
-/* ── Method badge ── */
+/* method badge */
 .method-badge {
     display: inline-block;
-    padding: 4px 14px;
+    padding: 4px 16px;
     border-radius: 999px;
-    font-size: 0.9rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    background: #1e293b;
-    color: #a78bfa;
-    border: 1px solid #4c1d95;
+    font-size: 0.88rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    background: linear-gradient(135deg, #f0d8ff, #d8e8ff);
+    color: #9060c0;
+    border: 1.5px solid #dcc8f8;
 }
 
-/* ── Hidden ── */
+/* hidden */
 .hidden {
     display: none !important;
 }

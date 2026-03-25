@@ -4,23 +4,18 @@
 
 using namespace std;
 
-// Calculates Shannon entropy
-double calculateEntropy(const string &data) {
-    if (data.empty()) return 0.0;
+// har byte ki frequency count karo, phir shannon entropy nikalo
+double calculateEntropy(const string &d) {
+    if (d.empty()) return 0.0;
 
-    unordered_map<char, int> freq;
+    unordered_map<char, int> fr;
+    for (char c : d) fr[c]++;
 
-    for (char c : data) {
-        freq[c]++;
-    }
-
-    double entropy = 0.0;
-    int n = data.size();
-
-    for (auto &p : freq) {
+    double h = 0.0;
+    int n = d.size();
+    for (auto &p : fr) {
         double prob = (double)p.second / n;
-        entropy -= prob * log2(prob);
+        h -= prob * log2(prob);
     }
-
-    return entropy;
+    return h;
 }

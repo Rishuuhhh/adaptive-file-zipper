@@ -1,34 +1,34 @@
 # Adaptive File Zipper
 
-A file compression system built in three layers: a C++ compression engine, a Node.js/Express backend, and a browser frontend.
+C++ compression engine with a Node.js backend and browser frontend.
 
-The C++ engine runs three compression strategies on every input and picks the one that produces the smallest output:
+The C++ part tries three methods on every file and keeps the smallest result:
 
-- **RLE** — run-length encoding, best for highly repetitive data
-- **Global Huffman** — canonical Huffman over the entire file, best for uniform distributions
-- **Block Huffman** — canonical Huffman applied per 32KB block, best for files with varying local distributions
+- RLE — good for files with lots of repeated bytes
+- Global Huffman — one huffman tree for the whole file
+- Block Huffman — separate huffman tree per 32KB chunk, good for mixed files
 
-For small inputs (< 4KB), only global Huffman is used to avoid block overhead. Near-random data (entropy >= 7.8 bits/symbol) is stored as-is.
+Files under 4KB skip block mode. Files with very high entropy (>= 7.8 bits/symbol) are stored as-is since compression won't help.
 
 ---
 
-## Prerequisites
+## Requirements
 
 - macOS or Linux
-- `g++` with C++17 support (`xcode-select --install` on macOS)
+- g++ with C++17 (`xcode-select --install` on macOS)
 - Node.js 18+
 
 ---
 
-## Quick Start
+## Setup
 
-### 1. Build the C++ binary
+### 1. Build
 
 ```bash
 make build
 ```
 
-Or manually:
+or manually:
 
 ```bash
 g++ -std=c++17 -O2 -o zipper \
@@ -37,47 +37,47 @@ g++ -std=c++17 -O2 -o zipper \
   -I include
 ```
 
-### 2. Install backend dependencies
+### 2. Backend
 
 ```bash
 cd backend && npm install
 ```
 
-### 3. Start the server
+### 3. Run server
 
 ```bash
 cd backend && npm start
 ```
 
-Server runs on `http://localhost:3000`. Keep this terminal open while using the app.
+Opens at `http://localhost:3000`. Keep this terminal running.
 
-### 4. Open the app
+### 4. Open browser
 
-Go to `http://localhost:3000` in your browser.
+Go to `http://localhost:3000`.
 
-> Do not open `frontend/index.html` directly as a `file://` URL — it won't reach the API.
-
----
-
-## Using the App
-
-1. Select any file and click **Compress**
-2. The results panel shows entropy, method chosen, adaptive ratio vs standard Huffman ratio, and a download link for the `.z` file
-3. To decompress: select a `.z` file and click **Decompress** — the original file downloads automatically
+> Don't open `frontend/index.html` directly as a file:// URL, it won't work.
 
 ---
 
-## CLI Usage
+## How to use
+
+1. Pick a file and click Compress
+2. You'll see entropy, which method was picked, compression ratio, and a download link for the `.z` file
+3. To decompress: pick a `.z` file and click Decompress
+
+---
+
+## CLI
 
 ```bash
-# Compress
+# compress
 ./zipper compress input.txt output.z
 
-# Decompress
+# decompress
 ./zipper decompress output.z recovered.txt
 ```
 
-Compress prints JSON to stdout:
+Compress prints JSON:
 
 ```json
 {
@@ -89,45 +89,43 @@ Compress prints JSON to stdout:
 }
 ```
 
-`adaptiveRatio` is the actual compressed size / original size. Lower is better.  
-`huffmanRatio` is the Shannon entropy lower bound — the theoretical best standard Huffman can do.
+`adaptiveRatio` = compressed size / original size. Lower is better.  
+`huffmanRatio` = theoretical best huffman can do (Shannon entropy bound).
 
 ---
 
-## Compression Methods
+## Methods
 
-| Method tag | Strategy | When it wins |
+| Tag | What it does | Best for |
 |---|---|---|
-| `RLE` | Run-length encoding | Long repeated byte runs |
-| `GLOBAL_HUFF` | Canonical Huffman, whole file | Uniform symbol distribution |
-| `BLOCK_HUFF` | Canonical Huffman, 32KB blocks | Files with varying local distributions |
-| `NONE` | No compression | Near-random data (entropy >= 7.8) |
+| `RLE` | run-length encoding | files with long repeated runs |
+| `GLOBAL_HUFF` | huffman on whole file | uniform data |
+| `BLOCK_HUFF` | huffman per 32KB block | files that change a lot |
+| `NONE` | no compression | near-random data |
 
-### Huffman header format
+### Huffman header layout
 
-Each Huffman segment stores only the symbols that actually appear:
+Only symbols that actually appear are stored:
 
 ```
-[1 byte]  N — number of unique symbols
+[1 byte]  N = number of unique symbols
 [N bytes] symbol values
 [N bytes] code lengths
-[1 byte]  padding bit count
-[rest]    bit-packed encoded data
+[1 byte]  padding bits in last byte
+[rest]    bit-packed data
 ```
-
-This keeps header overhead proportional to the number of unique symbols rather than a fixed 256 bytes.
 
 ---
 
-## Running Tests
+## Tests
 
-### C++ tests
+### C++
 
 ```bash
 make test
 ```
 
-Requires `googletest` and `rapidcheck`:
+Needs googletest and rapidcheck:
 
 ```bash
 brew install googletest
@@ -137,13 +135,13 @@ cd /tmp/rapidcheck && mkdir build && cd build
 cmake .. && make && sudo make install
 ```
 
-### Backend tests (Jest + Supertest)
+### Backend
 
 ```bash
 cd backend && npm test
 ```
 
-### Frontend tests (Jest + jsdom)
+### Frontend
 
 ```bash
 cd frontend && npm install && npm test
@@ -151,41 +149,41 @@ cd frontend && npm install && npm test
 
 ---
 
-## Project Structure
+## Project layout
 
 ```
 .
 ├── src/
-│   ├── main.cpp           # CLI entry point
-│   ├── controller.cpp     # Runs all strategies, picks best, dispatches decompress
-│   ├── block_huffman.cpp  # Global + block-split canonical Huffman
-│   ├── rle.cpp            # Run-length encoding
-│   ├── entropy.cpp        # Shannon entropy
-│   ├── file_io.cpp        # Pack/unpack file format
-│   └── huffman.cpp        # Standard Huffman (unused in pipeline, kept for reference)
-├── include/               # C++ headers
-├── tests/                 # C++ unit + property tests
+│   ├── main.cpp           # CLI entry
+│   ├── controller.cpp     # picks best method, handles decompress
+│   ├── block_huffman.cpp  # global + block huffman
+│   ├── rle.cpp            # run-length encoding
+│   ├── entropy.cpp        # entropy calculation
+│   ├── file_io.cpp        # file format pack/unpack
+│   └── huffman.cpp        # basic huffman (kept for reference)
+├── include/               # headers
+├── tests/                 # C++ tests
 ├── backend/
-│   ├── server.js          # Express API (/compress, /decompress, /download)
+│   ├── server.js          # Express API
 │   └── tests/
 ├── frontend/
 │   ├── index.html
 │   ├── script.js
 │   ├── style.css
 │   └── tests/
-├── data/                  # Uploaded files (auto-created)
-├── results/               # Output files (auto-created)
+├── data/                  # uploaded files
+├── results/               # output files
 ├── Makefile
-└── zipper                 # Compiled binary
+└── zipper                 # compiled binary
 ```
 
 ---
 
-## Makefile Targets
+## Makefile
 
-| Target | Description |
+| Target | What it does |
 |---|---|
-| `make build` | Compile the `zipper` binary |
-| `make test` | Build and run C++ tests |
-| `make check` | Compile-check test files without running |
-| `make clean` | Remove compiled artifacts |
+| `make build` | compile zipper |
+| `make test` | build and run C++ tests |
+| `make check` | compile check only |
+| `make clean` | remove build files |

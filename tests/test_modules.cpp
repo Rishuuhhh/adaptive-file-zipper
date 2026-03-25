@@ -1,10 +1,3 @@
-// Feature: adaptive-file-zipper, Property 4: Entropy always in range [0.0, 8.0]
-// Feature: adaptive-file-zipper, Property 5: Uniform distribution maximizes entropy
-// Feature: adaptive-file-zipper, Property 6: RLE output format is well-formed
-// Feature: adaptive-file-zipper, Property 7: RLE round-trip
-// Feature: adaptive-file-zipper, Property 8: Block Huffman output is valid bit-string
-// Feature: adaptive-file-zipper, Property 9: Block Huffman round-trip
-
 #include <gtest/gtest.h>
 #include <rapidcheck.h>
 #include <rapidcheck/gtest.h>
@@ -18,122 +11,90 @@
 #include <string>
 #include <sstream>
 
-// ─── Unit tests: calculateEntropy ────────────────────────────────────────────
-
-// Req 1a.4: empty input returns 0.0
+// khaali input pe entropy 0 honi chahiye
 TEST(Entropy, EmptyInputReturnsZero) {
     EXPECT_DOUBLE_EQ(calculateEntropy(""), 0.0);
 }
 
-// Req 1a.2: all-same-char input returns 0.0
+// sab same chars ho toh entropy 0 hogi
 TEST(Entropy, AllSameCharReturnsZero) {
     EXPECT_DOUBLE_EQ(calculateEntropy("aaaaaaa"), 0.0);
     EXPECT_DOUBLE_EQ(calculateEntropy("z"), 0.0);
 }
 
-// ─── Property 4: Entropy is always in range [0.0, 8.0] ───────────────────────
-// Validates: Requirements 1a.5
-RC_GTEST_PROP(Entropy, EntropyAlwaysInRange, ()) {
-    auto input = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
-    double e = calculateEntropy(input);
+// entropy hamesha 0 se 8 ke beech honi chahiye
+RC_GTEST_PROP(Entropy, AlwaysInRange, ()) {
+    auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
+    double e = calculateEntropy(in);
     RC_ASSERT(e >= 0.0);
     RC_ASSERT(e <= 8.0);
 }
 
-// ─── Property 5: Uniform distribution maximizes entropy ──────────────────────
-// Validates: Requirements 1a.3
-RC_GTEST_PROP(Entropy, UniformDistributionMaximizesEntropy, ()) {
-    // n >= 2 distinct chars, one occurrence each → entropy ≈ log2(n)
+// n distinct chars ho toh entropy = log2(n) hogi
+RC_GTEST_PROP(Entropy, UniformMaximizesEntropy, ()) {
     int n = *rc::gen::inRange<int>(2, 257);
-
-    std::string input;
-    input.reserve(n);
-    for (int i = 0; i < n; ++i) {
-        input += static_cast<char>(i);
-    }
-
-    double expected = std::log2(static_cast<double>(n));
-    double actual   = calculateEntropy(input);
-    RC_ASSERT(std::abs(actual - expected) < 1e-9);
+    std::string in;
+    for (int i = 0; i < n; i++) in += (char)i;
+    double exp = std::log2((double)n);
+    double act = calculateEntropy(in);
+    RC_ASSERT(std::abs(act - exp) < 1e-9);
 }
 
-// ─── Property 6: RLE output format is well-formed ────────────────────────────
-// Validates: Requirements 2.1
+// RLE output format sahi hona chahiye
 RC_GTEST_PROP(RLE, OutputFormatIsWellFormed, ()) {
-    auto input = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
-    std::string compressed = rleCompress(input);
+    auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
+    std::string c = rleCompress(in);
+    RC_ASSERT(!c.empty());
+    RC_ASSERT(c.back() != ';');
 
-    // Must not end with ';'
-    RC_ASSERT(!compressed.empty());
-    RC_ASSERT(compressed.back() != ';');
-
-    // Split by ';' and validate each token
-    std::string token;
-    std::istringstream stream(compressed);
-    while (std::getline(stream, token, ';')) {
-        // Each token must contain exactly one '|'
-        int pipeCount = static_cast<int>(std::count(token.begin(), token.end(), '|'));
-        RC_ASSERT(pipeCount == 1);
-
-        auto pos = token.find('|');
-        RC_ASSERT(pos != std::string::npos);
-
-        // Part after '|' must be a positive integer
-        std::string countStr = token.substr(pos + 1);
-        RC_ASSERT(!countStr.empty());
-        for (char ch : countStr) {
-            RC_ASSERT(std::isdigit(static_cast<unsigned char>(ch)));
-        }
-        int count = std::stoi(countStr);
-        RC_ASSERT(count > 0);
+    std::string tok;
+    std::istringstream ss(c);
+    while (std::getline(ss, tok, ';')) {
+        int pc = (int)std::count(tok.begin(), tok.end(), '|');
+        RC_ASSERT(pc == 1);
+        auto p = tok.find('|');
+        RC_ASSERT(p != std::string::npos);
+        std::string cs = tok.substr(p + 1);
+        RC_ASSERT(!cs.empty());
+        for (char ch : cs)
+            RC_ASSERT(std::isdigit((unsigned char)ch));
+        RC_ASSERT(std::stoi(cs) > 0);
     }
 }
 
-// ─── Property 7: RLE round-trip ──────────────────────────────────────────────
-// Validates: Requirements 2.2, 2.3
+// RLE compress -> decompress wapas original dena chahiye
 RC_GTEST_PROP(RLE, RoundTrip, ()) {
-    auto input = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
-    RC_ASSERT(rleDecompress(rleCompress(input)) == input);
+    auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
+    RC_ASSERT(rleDecompress(rleCompress(in)) == in);
 }
 
-// ─── Property 8: Block Huffman output is a valid bit-string ──────────────────
-// Validates: Requirements 3.1
+// block huffman output valid hona chahiye
 RC_GTEST_PROP(BlockHuffman, OutputIsValidBitString, ()) {
-    auto input = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
-    BlockResult result = blockHuffmanCompress(input);
-
-    // encoded must contain only '0' and '1'
-    for (char c : result.encoded) {
+    auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
+    BlockResult r = blockHuffmanCompress(in);
+    for (char c : r.encoded)
         RC_ASSERT(c == '0' || c == '1');
-    }
-
-    // codeMap must be non-empty
-    RC_ASSERT(!result.codeMap.empty());
+    RC_ASSERT(!r.codeMap.empty());
 }
 
-// ─── Property 9: Block Huffman round-trip ────────────────────────────────────
-// Validates: Requirements 3.2, 3.3, 3.4
+// block huffman round-trip
 RC_GTEST_PROP(BlockHuffman, RoundTrip, ()) {
-    auto input = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
-    BlockResult result = blockHuffmanCompress(input);
-    std::string recovered = blockHuffmanDecompress(result.encoded, result.codeMap);
-    RC_ASSERT(recovered == input);
+    auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
+    BlockResult r = blockHuffmanCompress(in);
+    RC_ASSERT(blockHuffmanDecompress(r.encoded, r.codeMap) == in);
 }
 
-// ─── Unit test: runAdaptiveCompression with empty input ───────────────────────
-// Validates: Requirements 1.4
+// khaali input pe NONE method aana chahiye
 TEST(Controller, EmptyInputReturnsNone) {
-    CompressionResult result = runAdaptiveCompression("");
-    EXPECT_EQ(result.method, "NONE");
-    EXPECT_DOUBLE_EQ(result.entropy, 0.0);
-    EXPECT_DOUBLE_EQ(result.adaptiveRatio, 1.0);
-    EXPECT_TRUE(result.compressedData.empty());
+    CompressionResult r = runAdaptiveCompression("");
+    EXPECT_EQ(r.method, "NONE");
+    EXPECT_DOUBLE_EQ(r.entropy, 0.0);
+    EXPECT_DOUBLE_EQ(r.adaptiveRatio, 1.0);
+    EXPECT_TRUE(r.compressedData.empty());
 }
 
-// ─── Unit test: runDecompression with unknown method ─────────────────────────
-// Validates: Requirements 7.4
+// unknown method pe khaali string aani chahiye
 TEST(Controller, UnknownMethodReturnsEmpty) {
-    std::string packed = packData("UNKNOWN", 0.0, "", "some payload");
-    std::string result = runDecompression(packed);
-    EXPECT_EQ(result, "");
+    std::string pk = packData("UNKNOWN", 0.0, "", "some payload");
+    EXPECT_EQ(runDecompression(pk), "");
 }

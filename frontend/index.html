@@ -5,25 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Adaptive File Zipper</title>
     <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
         <header>
-            <div class="logo">⚡</div>
-            <h1>Adaptive File Zipper</h1>
-            <p class="subtitle">Smart compression that picks the best algorithm for your file</p>
+            <div class="logo">🌸</div>
+            <h1>File Zipper</h1>
+            <p class="subtitle">picks the best compression for your file ✨</p>
         </header>
 
         <div class="card upload-card">
             <div class="drop-zone" id="dropZone">
-                <div class="drop-icon">📁</div>
-                <p class="drop-text">Drop a file here or <label for="fileInput" class="browse-link">browse</label></p>
-                <p class="drop-hint">Any file type supported</p>
+                <div class="drop-icon">🗂️</div>
+                <p class="drop-text">drop a file here or <label for="fileInput" class="browse-link">browse</label></p>
+                <p class="drop-hint">any file type works!</p>
                 <input type="file" id="fileInput">
             </div>
             <div class="selected-file hidden" id="selectedFile">
                 <span class="file-icon">📄</span>
-                <span id="fileName">No file selected</span>
+                <span id="fileName">no file selected</span>
             </div>
 
             <div class="actions">
@@ -42,26 +43,26 @@
 
             <div id="stats" class="hidden">
                 <div class="stats-grid">
-                    <div class="stat-card">
+                    <div class="stat-card card-purple">
                         <div class="stat-label">Method</div>
                         <div class="stat-value method-badge" id="method">—</div>
                     </div>
-                    <div class="stat-card">
+                    <div class="stat-card card-pink">
                         <div class="stat-label">Entropy</div>
                         <div class="stat-value" id="entropy">—</div>
                         <div class="stat-hint">low = repetitive · high = random</div>
                     </div>
-                    <div class="stat-card">
+                    <div class="stat-card card-mint">
                         <div class="stat-label">Adaptive Ratio</div>
                         <div class="stat-value highlight" id="adaptive">—</div>
                         <div class="stat-hint">compressed / original size</div>
                     </div>
-                    <div class="stat-card">
+                    <div class="stat-card card-blue">
                         <div class="stat-label">Huffman Ratio</div>
                         <div class="stat-value" id="huffman">—</div>
                         <div class="stat-hint">standard huffman baseline</div>
                     </div>
-                    <div class="stat-card">
+                    <div class="stat-card card-peach">
                         <div class="stat-label">Time</div>
                         <div class="stat-value" id="time">—</div>
                     </div>

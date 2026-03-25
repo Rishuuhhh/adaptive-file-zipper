@@ -3,38 +3,38 @@
 
 using namespace std;
 
-// Binary RLE: each run = 1 char + 2 chars (big-endian count, max 65535 per run)
+// har run ko: [char][count_hi][count_lo] format mein store karo (max 65535 per run)
 
-string rleCompress(const string &data) {
-    if (data.empty()) return "";
+string rleCompress(const string &d) {
+    if (d.empty()) return "";
 
     string out;
-    int i = 0;
-    int n = (int)data.size();
+    int i = 0, n = (int)d.size();
 
     while (i < n) {
-        char c = data[i];
+        char c = d[i];
         int j = i + 1;
-        while (j < n && data[j] == c && (j - i) < 65535) j++;
-        int count = j - i;
+        // same char kitni baar repeat ho raha hai
+        while (j < n && d[j] == c && (j - i) < 65535) j++;
+        int cnt = j - i;
         out.push_back(c);
-        out.push_back((char)((count >> 8) & 0xFF));
-        out.push_back((char)(count & 0xFF));
+        out.push_back((char)((cnt >> 8) & 0xFF)); // count ka high byte
+        out.push_back((char)(cnt & 0xFF));         // count ka low byte
         i = j;
     }
     return out;
 }
 
-string rleDecompress(const string &data) {
-    if (data.empty()) return "";
+string rleDecompress(const string &d) {
+    if (d.empty()) return "";
 
-    string result;
-    int n = (int)data.size();
+    string res;
+    int n = (int)d.size();
 
     for (int i = 0; i + 2 < n; i += 3) {
-        char c = data[i];
-        int count = ((unsigned char)data[i+1] << 8) | (unsigned char)data[i+2];
-        result.append(count, c);
+        char c   = d[i];
+        int cnt  = ((unsigned char)d[i+1] << 8) | (unsigned char)d[i+2];
+        res.append(cnt, c);
     }
-    return result;
+    return res;
 }

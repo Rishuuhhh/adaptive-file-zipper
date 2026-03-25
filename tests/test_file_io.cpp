@@ -1,6 +1,3 @@
-// Feature: adaptive-file-zipper, Property 10: CodeMap serialization round-trip
-// Feature: adaptive-file-zipper, Property 11: File packing round-trip
-
 #include <gtest/gtest.h>
 #include <rapidcheck.h>
 #include <rapidcheck/gtest.h>
@@ -12,57 +9,39 @@
 #include <string>
 #include <unordered_map>
 
-// Property 10: CodeMap serialization round-trip
-// Validates: Requirements 4.1, 4.2, 4.3, 4.4
-RC_GTEST_PROP(FileIO, CodeMapSerializationRoundTrip, ()) {
-    // Generate a random unordered_map<string, string>
-    auto map = *rc::gen::container<std::unordered_map<std::string, std::string>>(
+// codeMap serialize -> deserialize wapas same hona chahiye
+RC_GTEST_PROP(FileIO, CodeMapRoundTrip, ()) {
+    auto m = *rc::gen::container<std::unordered_map<std::string, std::string>>(
         rc::gen::arbitrary<std::string>(),
         rc::gen::arbitrary<std::string>()
     );
-
-    auto serialized = serializeCodeMap(map);
-    auto recovered = deserializeCodeMap(serialized);
-
-    RC_ASSERT(recovered == map);
+    RC_ASSERT(deserializeCodeMap(serializeCodeMap(m)) == m);
 }
 
-// Property 11: File packing round-trip
-// Validates: Requirements 5.1, 5.2, 5.3, 5.4
-RC_GTEST_PROP(FileIO, FilePackingRoundTrip, ()) {
-    // Generate random method string (no newlines, to be a valid header line)
-    auto method = *rc::gen::map(
+// pack -> unpack wapas same data dena chahiye
+RC_GTEST_PROP(FileIO, PackRoundTrip, ()) {
+    auto meth = *rc::gen::map(
         rc::gen::arbitrary<std::string>(),
         [](std::string s) {
-            // Remove newlines so method is a single header line
             s.erase(std::remove(s.begin(), s.end(), '\n'), s.end());
             return s;
         }
     );
 
-    // Generate entropy as a double in a reasonable range
-    auto entropy = *rc::gen::inRange<int>(0, 800);
-    double entropyVal = entropy / 100.0; // [0.0, 8.0)
+    auto ei = *rc::gen::inRange<int>(0, 800);
+    double ev = ei / 100.0;
 
-    // Generate arbitrary codeMapSerialized (may contain |, ;, newlines)
-    auto codeMapSerialized = *rc::gen::arbitrary<std::string>();
+    auto cms = *rc::gen::arbitrary<std::string>();
+    auto pay = *rc::gen::arbitrary<std::string>();
 
-    // Generate arbitrary payload (may contain |, ;, newlines)
-    auto payload = *rc::gen::arbitrary<std::string>();
+    auto pk = packData(meth, ev, cms, pay);
 
-    auto packed = packData(method, entropyVal, codeMapSerialized, payload);
+    std::string rm, rc2, rp;
+    double re = 0.0;
+    unpackData(pk, rm, re, rc2, rp);
 
-    std::string recoveredMethod;
-    double recoveredEntropy = 0.0;
-    std::string recoveredCodeMap;
-    std::string recoveredPayload;
-
-    unpackData(packed, recoveredMethod, recoveredEntropy, recoveredCodeMap, recoveredPayload);
-
-    RC_ASSERT(recoveredMethod == method);
-    RC_ASSERT(recoveredCodeMap == codeMapSerialized);
-    RC_ASSERT(recoveredPayload == payload);
-
-    // Entropy round-trips through to_string/stod — check within tolerance
-    RC_ASSERT(std::abs(recoveredEntropy - entropyVal) < 1e-6);
+    RC_ASSERT(rm == meth);
+    RC_ASSERT(rc2 == cms);
+    RC_ASSERT(rp == pay);
+    RC_ASSERT(std::abs(re - ev) < 1e-6);
 }

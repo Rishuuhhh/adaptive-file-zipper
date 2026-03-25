@@ -4,110 +4,111 @@
 
 using namespace std;
 
-// Huffman tree node
+// huffman tree ka node
 struct HNode {
-    int symbol; // -1 for internal nodes
-    int freq;
-    HNode *left;
-    HNode *right;
-    HNode(int s, int f) : symbol(s), freq(f), left(0), right(0) {}
+    int sym; // -1 = internal, 0-255 = leaf
+    int frq;
+    HNode *l, *r;
+    HNode(int s, int f) : sym(s), frq(f), l(0), r(0) {}
 };
 
 struct HCmp {
-    bool operator()(HNode *a, HNode *b) const { return a->freq > b->freq; }
+    bool operator()(HNode *a, HNode *b) const { return a->frq > b->frq; }
 };
 
-static void buildCodes(HNode *n, string &prefix, unordered_map<int, string> &out) {
+// tree traverse karke har symbol ka code nikalo
+static void getCodes(HNode *n, string &pre, unordered_map<int, string> &out) {
     if (!n) return;
-    if (!n->left && !n->right) {
-        out[n->symbol] = prefix.empty() ? "0" : prefix;
+    if (!n->l && !n->r) {
+        out[n->sym] = pre.empty() ? "0" : pre;
         return;
     }
-    prefix.push_back('0'); buildCodes(n->left,  prefix, out); prefix.pop_back();
-    prefix.push_back('1'); buildCodes(n->right, prefix, out); prefix.pop_back();
+    pre.push_back('0'); getCodes(n->l, pre, out); pre.pop_back();
+    pre.push_back('1'); getCodes(n->r, pre, out); pre.pop_back();
 }
 
 static void freeTree(HNode *n) {
     if (!n) return;
-    freeTree(n->left); freeTree(n->right);
+    freeTree(n->l); freeTree(n->r);
     delete n;
 }
 
-// Pack bit-string into bytes. First byte = padding count.
+// bit string ko bytes mein pack karo, pehla byte = padding count
 static string packBits(const string &bits) {
-    int padding = (8 - (int)bits.size() % 8) % 8;
+    int pad = (8 - (int)bits.size() % 8) % 8;
     string out;
-    out.push_back((char)padding);
+    out.push_back((char)pad);
     int cur = 0, cnt = 0;
     for (char b : bits) {
         cur = (cur << 1) | (b == '1' ? 1 : 0);
         if (++cnt == 8) { out.push_back((char)cur); cur = 0; cnt = 0; }
     }
-    if (cnt > 0) out.push_back((char)(cur << padding));
+    if (cnt > 0) out.push_back((char)(cur << pad));
     return out;
 }
 
-static string unpackBits(const string &packed) {
-    if (packed.empty()) return "";
-    int padding = (unsigned char)packed[0];
+// bytes se bit string wapas nikalo
+static string unpackBits(const string &pk) {
+    if (pk.empty()) return "";
+    int pad = (unsigned char)pk[0];
     string bits;
-    int n = (int)packed.size();
+    int n = (int)pk.size();
     for (int i = 1; i < n; i++) {
-        int byte = (unsigned char)packed[i];
-        int valid = (i == n - 1) ? (8 - padding) : 8;
+        int by = (unsigned char)pk[i];
+        int valid = (i == n - 1) ? (8 - pad) : 8;
         for (int b = 7; b >= 8 - valid; b--)
-            bits.push_back((byte >> b) & 1 ? '1' : '0');
+            bits.push_back((by >> b) & 1 ? '1' : '0');
     }
     return bits;
 }
 
-HuffmanResult huffmanCompress(const string &data) {
-    if (data.empty()) return {"", {}};
+HuffmanResult huffmanCompress(const string &d) {
+    if (d.empty()) return {"", {}};
 
-    int freq[256] = {};
-    for (int i = 0; i < (int)data.size(); i++)
-        freq[(unsigned char)data[i]]++;
+    int fr[256] = {};
+    for (int i = 0; i < (int)d.size(); i++)
+        fr[(unsigned char)d[i]]++;
 
     priority_queue<HNode*, vector<HNode*>, HCmp> pq;
     for (int i = 0; i < 256; i++)
-        if (freq[i] > 0) pq.push(new HNode(i, freq[i]));
+        if (fr[i] > 0) pq.push(new HNode(i, fr[i]));
 
     while ((int)pq.size() > 1) {
-        HNode *l = pq.top(); pq.pop();
-        HNode *r = pq.top(); pq.pop();
-        HNode *p = new HNode(-1, l->freq + r->freq);
-        p->left = l; p->right = r;
+        HNode *a = pq.top(); pq.pop();
+        HNode *b = pq.top(); pq.pop();
+        HNode *p = new HNode(-1, a->frq + b->frq);
+        p->l = a; p->r = b;
         pq.push(p);
     }
 
     HNode *root = pq.top();
     unordered_map<int, string> codes;
-    string prefix;
-    buildCodes(root, prefix, codes);
+    string pre;
+    getCodes(root, pre, codes);
     freeTree(root);
 
     string bits;
-    for (int i = 0; i < (int)data.size(); i++)
-        bits += codes[(unsigned char)data[i]];
+    for (int i = 0; i < (int)d.size(); i++)
+        bits += codes[(unsigned char)d[i]];
 
     return {packBits(bits), codes};
 }
 
-string huffmanDecompress(const string &encoded, const unordered_map<int, string> &codeMap) {
-    if (encoded.empty()) return "";
+string huffmanDecompress(const string &enc, const unordered_map<int, string> &cm) {
+    if (enc.empty()) return "";
 
     unordered_map<string, int> rev;
-    for (auto &kv : codeMap) rev[kv.second] = kv.first;
+    for (auto &kv : cm) rev[kv.second] = kv.first;
 
-    string bits = unpackBits(encoded);
-    string result, cursor;
+    string bits = unpackBits(enc);
+    string res, cur;
     for (char b : bits) {
-        cursor.push_back(b);
-        auto it = rev.find(cursor);
+        cur.push_back(b);
+        auto it = rev.find(cur);
         if (it != rev.end()) {
-            result.push_back((char)it->second);
-            cursor.clear();
+            res.push_back((char)it->second);
+            cur.clear();
         }
     }
-    return result;
+    return res;
 }

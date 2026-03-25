@@ -5,384 +5,339 @@
 
 using namespace std;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────────────────────
+// 4KB se chhota input ho toh global huffman use karo
+static const int SML_THRESH = 4 * 1024;
+// har block 32KB ka hoga
+static const int BLK_SZ = 32 * 1024;
 
-static const int SMALL_INPUT_THRESHOLD = 4 * 1024;      // 4 KB
-static const int BLOCK_SIZE            = 32 * 1024;     // 32 KB per block
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tree node
-// ─────────────────────────────────────────────────────────────────────────────
-
+// huffman tree ka ek node
 struct CNode {
-    int symbol;  // -1 = internal, 0-255 = leaf
-    int freq;
-    CNode *left;
-    CNode *right;
-    CNode(int s, int f) : symbol(s), freq(f), left(0), right(0) {}
+    int sym;  // -1 = internal, 0-255 = leaf byte
+    int frq;  // kitni baar aaya
+    CNode *l, *r;
+    CNode(int s, int f) : sym(s), frq(f), l(0), r(0) {}
 };
 
+// min-heap ke liye: kam frequency wala pehle
 struct CNodeCmp {
-    bool operator()(CNode *a, CNode *b) const { return a->freq > b->freq; }
+    bool operator()(CNode *a, CNode *b) const { return a->frq > b->frq; }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tree construction
-// ─────────────────────────────────────────────────────────────────────────────
-
-static CNode* buildTree(int freq[256]) {
+// frequency array se huffman tree banao
+static CNode* buildTree(int fr[256]) {
     priority_queue<CNode*, vector<CNode*>, CNodeCmp> pq;
     for (int i = 0; i < 256; i++)
-        if (freq[i] > 0) pq.push(new CNode(i, freq[i]));
-    if ((int)pq.size() == 0) return 0;
+        if (fr[i] > 0) pq.push(new CNode(i, fr[i]));
+    if (pq.empty()) return 0;
+    // do chhote nodes ko merge karte raho
     while ((int)pq.size() > 1) {
-        CNode *l = pq.top(); pq.pop();
-        CNode *r = pq.top(); pq.pop();
-        CNode *p = new CNode(-1, l->freq + r->freq);
-        p->left = l; p->right = r;
+        CNode *a = pq.top(); pq.pop();
+        CNode *b = pq.top(); pq.pop();
+        CNode *p = new CNode(-1, a->frq + b->frq);
+        p->l = a; p->r = b;
         pq.push(p);
     }
     return pq.top();
 }
 
+// tree ki memory free karo
 static void freeTree(CNode *n) {
     if (!n) return;
-    freeTree(n->left); freeTree(n->right);
+    freeTree(n->l); freeTree(n->r);
     delete n;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Length extraction
-// ─────────────────────────────────────────────────────────────────────────────
-
-static void extractLengths(CNode *n, int depth, int lengths[256]) {
+// tree traverse karke har symbol ki bit length nikalo
+static void getLen(CNode *n, int dep, int ln[256]) {
     if (!n) return;
-    if (n->symbol >= 0) {
-        lengths[n->symbol] = (depth == 0) ? 1 : depth;
+    if (n->sym >= 0) {
+        ln[n->sym] = (dep == 0) ? 1 : dep; // single symbol ho toh 1 bit
         return;
     }
-    extractLengths(n->left,  depth + 1, lengths);
-    extractLengths(n->right, depth + 1, lengths);
+    getLen(n->l, dep + 1, ln);
+    getLen(n->r, dep + 1, ln);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Canonical code generation
-// ─────────────────────────────────────────────────────────────────────────────
-
-static void buildCanonicalCodes(int lengths[256], unsigned int codes[256]) {
-    vector<pair<int,int>> syms;
+// lengths se canonical huffman codes banao
+static void mkCodes(int ln[256], unsigned int cd[256]) {
+    vector<pair<int,int>> sv;
     for (int i = 0; i < 256; i++)
-        if (lengths[i] > 0) syms.push_back({lengths[i], i});
-    sort(syms.begin(), syms.end());
+        if (ln[i] > 0) sv.push_back({ln[i], i});
+    sort(sv.begin(), sv.end());
 
-    unsigned int code = 0;
-    int prevLen = 0;
-    for (int k = 0; k < (int)syms.size(); k++) {
-        int len = syms[k].first;
-        int sym = syms[k].second;
-        code <<= (len - prevLen);
-        codes[sym] = code;
-        code++;
-        prevLen = len;
+    unsigned int c = 0;
+    int pl = 0;
+    for (auto &x : sv) {
+        int len = x.first, sym = x.second;
+        c <<= (len - pl); // length badhi toh shift karo
+        cd[sym] = c++;
+        pl = len;
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Encoding — pack bits MSB-first into bytes
-// ─────────────────────────────────────────────────────────────────────────────
-
-static void encodeBits(const char *data, int dataLen,
-                        int lengths[256], unsigned int codes[256],
-                        vector<char> &packedBytes, int &padding) {
+// data ko bits mein pack karo (MSB first)
+static void encBits(const char *d, int dlen,
+                    int ln[256], unsigned int cd[256],
+                    vector<char> &pb, int &pad) {
     int cur = 0, cnt = 0;
-    for (int i = 0; i < dataLen; i++) {
-        int sym = (unsigned char)data[i];
-        int len = lengths[sym];
-        unsigned int code = codes[sym];
+    for (int i = 0; i < dlen; i++) {
+        int s = (unsigned char)d[i];
+        int len = ln[s];
+        unsigned int c = cd[s];
         for (int b = len - 1; b >= 0; b--) {
-            cur = (cur << 1) | ((code >> b) & 1);
-            if (++cnt == 8) { packedBytes.push_back((char)cur); cur = 0; cnt = 0; }
+            cur = (cur << 1) | ((c >> b) & 1);
+            if (++cnt == 8) { pb.push_back((char)cur); cur = 0; cnt = 0; }
         }
     }
-    padding = 0;
+    pad = 0;
     if (cnt > 0) {
-        padding = 8 - cnt;
-        packedBytes.push_back((char)(cur << padding));
+        pad = 8 - cnt;
+        pb.push_back((char)(cur << pad)); // bacha hua byte, zeros se fill
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Header: [1 byte N] [N bytes symbols] [N bytes lengths] [1 byte padding]
-// ─────────────────────────────────────────────────────────────────────────────
-
-static void writeHeader(int lengths[256], int padding, string &out) {
-    vector<int> syms;
+// header likho: [N][symbols][lengths][padding]
+static void wHdr(int ln[256], int pad, string &out) {
+    vector<int> sv;
     for (int i = 0; i < 256; i++)
-        if (lengths[i] > 0) syms.push_back(i);
-    int N = (int)syms.size();
+        if (ln[i] > 0) sv.push_back(i);
+    int N = (int)sv.size();
     out.push_back((char)N);
-    for (int i = 0; i < N; i++) out.push_back((char)syms[i]);
-    for (int i = 0; i < N; i++) out.push_back((char)lengths[syms[i]]);
-    out.push_back((char)padding);
+    for (int i = 0; i < N; i++) out.push_back((char)sv[i]);
+    for (int i = 0; i < N; i++) out.push_back((char)ln[sv[i]]);
+    out.push_back((char)pad);
 }
 
-// Returns header byte count consumed; fills lengths[] and padding
-static int readHeader(const string &src, int pos, int lengths[256], int &padding) {
-    int start = pos;
-    int N = (unsigned char)src[pos++];
-    int symbols[256] = {};
-    for (int i = 0; i < N; i++) symbols[i] = (unsigned char)src[pos++];
-    for (int i = 0; i < N; i++) lengths[symbols[i]] = (unsigned char)src[pos++];
-    padding = (unsigned char)src[pos++];
-    return pos - start;
+// header padho, lengths aur padding fill karo
+static int rHdr(const string &s, int pos, int ln[256], int &pad) {
+    int st = pos;
+    int N = (unsigned char)s[pos++];
+    int sym[256] = {};
+    for (int i = 0; i < N; i++) sym[i] = (unsigned char)s[pos++];
+    for (int i = 0; i < N; i++) ln[sym[i]] = (unsigned char)s[pos++];
+    pad = (unsigned char)s[pos++];
+    return pos - st;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Decoding
-// ─────────────────────────────────────────────────────────────────────────────
-
-static string decodeBits(const string &src, int dataStart, int dataEnd,
-                          int padding, int lengths[256], unsigned int codes[256]) {
-    unordered_map<unsigned int, int> decodeTable;
-    int maxLen = 0;
+// compressed bits ko wapas original bytes mein convert karo
+static string decBits(const string &s, int ds, int de,
+                       int pad, int ln[256], unsigned int cd[256]) {
+    unordered_map<unsigned int, int> tbl;
+    int mx = 0;
     for (int i = 0; i < 256; i++) {
-        if (lengths[i] > 0) {
-            unsigned int key = (codes[i] << 5) | (unsigned int)lengths[i];
-            decodeTable[key] = i;
-            if (lengths[i] > maxLen) maxLen = lengths[i];
+        if (ln[i] > 0) {
+            unsigned int k = (cd[i] << 5) | (unsigned int)ln[i];
+            tbl[k] = i;
+            if (ln[i] > mx) mx = ln[i];
         }
     }
 
-    int totalBits = (dataEnd - dataStart) * 8 - padding;
-    int bitsRead = 0;
+    int tot = (de - ds) * 8 - pad; // valid bits ki count
+    int br = 0;
     unsigned int buf = 0;
-    int bufBits = 0;
-    int srcIdx = dataStart;
-    string result;
+    int bb = 0, si = ds;
+    string res;
 
-    while (bitsRead < totalBits) {
-        while (bufBits < maxLen && srcIdx < dataEnd) {
-            buf = (buf << 8) | (unsigned char)src[srcIdx++];
-            bufBits += 8;
+    while (br < tot) {
+        // buffer mein bits load karo
+        while (bb < mx && si < de) {
+            buf = (buf << 8) | (unsigned char)s[si++];
+            bb += 8;
         }
-        bool found = false;
-        int limit = (bufBits < maxLen) ? bufBits : maxLen;
-        for (int len = 1; len <= limit; len++) {
-            if (bitsRead + len > totalBits) break;
-            unsigned int candidate = buf >> (bufBits - len);
-            unsigned int key = (candidate << 5) | (unsigned int)len;
-            auto dit = decodeTable.find(key);
-            if (dit != decodeTable.end()) {
-                result.push_back((char)dit->second);
-                bufBits -= len;
-                buf &= (1u << bufBits) - 1;
-                bitsRead += len;
-                found = true;
+        bool ok = false;
+        int lim = (bb < mx) ? bb : mx;
+        for (int len = 1; len <= lim; len++) {
+            if (br + len > tot) break;
+            unsigned int cand = buf >> (bb - len);
+            unsigned int k = (cand << 5) | (unsigned int)len;
+            auto it = tbl.find(k);
+            if (it != tbl.end()) {
+                res.push_back((char)it->second);
+                bb -= len;
+                buf &= (1u << bb) - 1;
+                br += len;
+                ok = true;
                 break;
             }
         }
-        if (!found) break;
+        if (!ok) break; // match nahi mila, data kharab ho sakta hai
     }
-    return result;
+    return res;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Global Huffman: compress entire input as one unit
-// ─────────────────────────────────────────────────────────────────────────────
+// poore input ko ek huffman tree se compress karo
+string globalHuffmanCompress(const string &d) {
+    int fr[256] = {};
+    for (int i = 0; i < (int)d.size(); i++)
+        fr[(unsigned char)d[i]]++;
 
-string globalHuffmanCompress(const string &data) {
-    int freq[256] = {};
-    for (int i = 0; i < (int)data.size(); i++)
-        freq[(unsigned char)data[i]]++;
-
-    CNode *root = buildTree(freq);
+    CNode *root = buildTree(fr);
     if (!root) return "";
 
-    int lengths[256] = {};
-    extractLengths(root, 0, lengths);
+    int ln[256] = {};
+    getLen(root, 0, ln);
     freeTree(root);
 
-    unsigned int codes[256] = {};
-    buildCanonicalCodes(lengths, codes);
+    unsigned int cd[256] = {};
+    mkCodes(ln, cd);
 
-    vector<char> packedBytes;
-    int padding = 0;
-    encodeBits(data.data(), (int)data.size(), lengths, codes, packedBytes, padding);
+    vector<char> pb;
+    int pad = 0;
+    encBits(d.data(), (int)d.size(), ln, cd, pb, pad);
 
-    // Tag byte 'G' to identify global mode
+    // 'G' = global mode
     string out;
     out.push_back('G');
-    writeHeader(lengths, padding, out);
-    for (int i = 0; i < (int)packedBytes.size(); i++) out.push_back(packedBytes[i]);
+    wHdr(ln, pad, out);
+    for (char c : pb) out.push_back(c);
     return out;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Block-based Huffman: compress each BLOCK_SIZE chunk independently
-//
-// Format:
-//   [1 byte 'B']
-//   [4 bytes: number of blocks, big-endian]
-//   For each block:
-//     [4 bytes: compressed block size, big-endian]
-//     [header + packed bits for that block]
-// ─────────────────────────────────────────────────────────────────────────────
-
-static void writeInt32(string &out, int v) {
+// int ko 4 bytes mein likho (big-endian)
+static void wI32(string &out, int v) {
     out.push_back((char)((v >> 24) & 0xFF));
     out.push_back((char)((v >> 16) & 0xFF));
     out.push_back((char)((v >>  8) & 0xFF));
     out.push_back((char)( v        & 0xFF));
 }
 
-static int readInt32(const string &src, int pos) {
-    return ((unsigned char)src[pos]   << 24)
-         | ((unsigned char)src[pos+1] << 16)
-         | ((unsigned char)src[pos+2] <<  8)
-         |  (unsigned char)src[pos+3];
+// 4 bytes se int padho (big-endian)
+static int rI32(const string &s, int p) {
+    return ((unsigned char)s[p]   << 24)
+         | ((unsigned char)s[p+1] << 16)
+         | ((unsigned char)s[p+2] <<  8)
+         |  (unsigned char)s[p+3];
 }
 
-string blockSplitCompress(const string &data) {
-    int n = (int)data.size();
-    int numBlocks = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+// input ko 32KB blocks mein tod ke har block alag compress karo
+string blockSplitCompress(const string &d) {
+    int n = (int)d.size();
+    int nb = (n + BLK_SZ - 1) / BLK_SZ; // kitne blocks
 
     string out;
-    out.push_back('B');
-    writeInt32(out, numBlocks);
+    out.push_back('B'); // 'B' = block mode
+    wI32(out, nb);
 
-    for (int b = 0; b < numBlocks; b++) {
-        int blockStart = b * BLOCK_SIZE;
-        int blockLen   = (blockStart + BLOCK_SIZE <= n) ? BLOCK_SIZE : (n - blockStart);
+    for (int b = 0; b < nb; b++) {
+        int bs = b * BLK_SZ;
+        int bl = (bs + BLK_SZ <= n) ? BLK_SZ : (n - bs); // last block chhota ho sakta hai
 
-        int freq[256] = {};
-        for (int i = blockStart; i < blockStart + blockLen; i++)
-            freq[(unsigned char)data[i]]++;
+        int fr[256] = {};
+        for (int i = bs; i < bs + bl; i++)
+            fr[(unsigned char)d[i]]++;
 
-        CNode *root = buildTree(freq);
-        int lengths[256] = {};
-        extractLengths(root, 0, lengths);
+        CNode *root = buildTree(fr);
+        int ln[256] = {};
+        getLen(root, 0, ln);
         freeTree(root);
 
-        unsigned int codes[256] = {};
-        buildCanonicalCodes(lengths, codes);
+        unsigned int cd[256] = {};
+        mkCodes(ln, cd);
 
-        vector<char> packedBytes;
-        int padding = 0;
-        encodeBits(data.data() + blockStart, blockLen, lengths, codes, packedBytes, padding);
+        vector<char> pb;
+        int pad = 0;
+        encBits(d.data() + bs, bl, ln, cd, pb, pad);
 
-        // Build this block's bytes
-        string blockOut;
-        writeHeader(lengths, padding, blockOut);
-        for (int i = 0; i < (int)packedBytes.size(); i++) blockOut.push_back(packedBytes[i]);
+        string bk;
+        wHdr(ln, pad, bk);
+        for (char c : pb) bk.push_back(c);
 
-        writeInt32(out, (int)blockOut.size());
-        out += blockOut;
+        wI32(out, (int)bk.size());
+        out += bk;
     }
     return out;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Public API — compress
-// ─────────────────────────────────────────────────────────────────────────────
+// compress karo — input size ke hisaab se best method choose karo
+BlockResult blockHuffmanCompress(const string &d) {
+    if (d.empty()) return {"", {}};
 
-BlockResult blockHuffmanCompress(const string &data) {
-    if (data.empty()) return {"", {}};
-
-    // Single-symbol edge case
+    // sab bytes same hain kya
     {
-        bool allSame = true;
-        for (int i = 1; i < (int)data.size(); i++)
-            if (data[i] != data[0]) { allSame = false; break; }
-        if (allSame) {
-            // Store as global with trivial 1-bit code
+        bool same = true;
+        for (int i = 1; i < (int)d.size(); i++)
+            if (d[i] != d[0]) { same = false; break; }
+        if (same) {
+            // sirf ek symbol, 1 bit kaafi hai
             string out;
             out.push_back('G');
-            int lengths[256] = {};
-            lengths[(unsigned char)data[0]] = 1;
-            unsigned int codes[256] = {};
-            vector<char> packedBytes;
-            int padding = 0;
-            encodeBits(data.data(), (int)data.size(), lengths, codes, packedBytes, padding);
-            writeHeader(lengths, padding, out);
-            for (int i = 0; i < (int)packedBytes.size(); i++) out.push_back(packedBytes[i]);
+            int ln[256] = {};
+            ln[(unsigned char)d[0]] = 1;
+            unsigned int cd[256] = {};
+            vector<char> pb;
+            int pad = 0;
+            encBits(d.data(), (int)d.size(), ln, cd, pb, pad);
+            wHdr(ln, pad, out);
+            for (char c : pb) out.push_back(c);
             return {out, {}};
         }
     }
 
-    int n = (int)data.size();
+    int n = (int)d.size();
 
-    if (n < SMALL_INPUT_THRESHOLD) {
-        // Small input: global Huffman only (avoid block overhead)
-        return {globalHuffmanCompress(data), {}};
-    }
+    // chhota input, global hi theek hai
+    if (n < SML_THRESH)
+        return {globalHuffmanCompress(d), {}};
 
-    // Large input: try both, pick smaller
-    string global = globalHuffmanCompress(data);
-    string blocked = blockSplitCompress(data);
+    // dono try karo, jo chhota ho woh lo
+    string g = globalHuffmanCompress(d);
+    string bk = blockSplitCompress(d);
 
-    if ((int)global.size() <= (int)blocked.size())
-        return {global, {}};
-    else
-        return {blocked, {}};
+    if ((int)g.size() <= (int)bk.size())
+        return {g, {}};
+    return {bk, {}};
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Public API — decompress
-// ─────────────────────────────────────────────────────────────────────────────
+// decompress karo — pehla byte dekh ke mode pata karo
+string blockHuffmanDecompress(const string &enc,
+                               const unordered_map<string, string> &) {
+    if (enc.empty()) return "";
 
-string blockHuffmanDecompress(const string &encoded,
-                               const unordered_map<string, string> & /*codeMap*/) {
-    if (encoded.empty()) return "";
-
-    char mode = encoded[0];
+    char mode = enc[0]; // 'G' ya 'B'
 
     if (mode == 'G') {
-        // Global Huffman
         int pos = 1;
-        int lengths[256] = {};
-        int padding = 0;
-        int consumed = readHeader(encoded, pos, lengths, padding);
-        int dataStart = pos + consumed;
+        int ln[256] = {};
+        int pad = 0;
+        int used = rHdr(enc, pos, ln, pad);
+        int dstart = pos + used;
 
-        unsigned int codes[256] = {};
-        buildCanonicalCodes(lengths, codes);
+        unsigned int cd[256] = {};
+        mkCodes(ln, cd);
 
-        // Single-symbol edge case
-        int N = (unsigned char)encoded[1];
+        // single symbol edge case
+        int N = (unsigned char)enc[1];
         if (N == 1) {
-            int sym = (unsigned char)encoded[2];
-            int pad = (unsigned char)encoded[4];
-            int totalBits = ((int)encoded.size() - dataStart) * 8 - pad;
-            return string(totalBits, (char)sym);
+            int sym = (unsigned char)enc[2];
+            int p   = (unsigned char)enc[4];
+            int tb  = ((int)enc.size() - dstart) * 8 - p;
+            return string(tb, (char)sym);
         }
 
-        return decodeBits(encoded, dataStart, (int)encoded.size(), padding, lengths, codes);
+        return decBits(enc, dstart, (int)enc.size(), pad, ln, cd);
     }
 
     if (mode == 'B') {
-        // Block-based Huffman
         int pos = 1;
-        int numBlocks = readInt32(encoded, pos); pos += 4;
-        string result;
+        int nb = rI32(enc, pos); pos += 4;
+        string res;
 
-        for (int b = 0; b < numBlocks; b++) {
-            int blockSize = readInt32(encoded, pos); pos += 4;
-            int blockEnd  = pos + blockSize;
+        for (int b = 0; b < nb; b++) {
+            int bsz = rI32(enc, pos); pos += 4;
+            int bend = pos + bsz;
 
-            int lengths[256] = {};
-            int padding = 0;
-            int consumed = readHeader(encoded, pos, lengths, padding);
-            int dataStart = pos + consumed;
+            int ln[256] = {};
+            int pad = 0;
+            int used = rHdr(enc, pos, ln, pad);
+            int dstart = pos + used;
 
-            unsigned int codes[256] = {};
-            buildCanonicalCodes(lengths, codes);
+            unsigned int cd[256] = {};
+            mkCodes(ln, cd);
 
-            result += decodeBits(encoded, dataStart, blockEnd, padding, lengths, codes);
-            pos = blockEnd;
+            res += decBits(enc, dstart, bend, pad, ln, cd);
+            pos = bend;
         }
-        return result;
+        return res;
     }
 
     return ""; // unknown mode

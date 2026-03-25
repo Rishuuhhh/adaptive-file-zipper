@@ -1,6 +1,3 @@
-// Unit tests for the zipper CLI interface
-// Validates: Requirements 8.1, 8.2, 8.3, 8.4
-
 #include <gtest/gtest.h>
 
 #include <array>
@@ -10,83 +7,71 @@
 #include <sstream>
 #include <string>
 
-// Helper: run a shell command and capture stdout + exit code
-static std::pair<std::string, int> runCommand(const std::string &cmd) {
-    std::string output;
+// command run karo aur output + exit code wapas lo
+static std::pair<std::string, int> run(const std::string &cmd) {
+    std::string out;
     std::array<char, 256> buf;
-
-    FILE *pipe = popen(cmd.c_str(), "r");
-    if (!pipe) return {"", -1};
-
-    while (fgets(buf.data(), buf.size(), pipe)) {
-        output += buf.data();
-    }
-
-    int status = pclose(pipe);
-    int exitCode = WEXITSTATUS(status);
-    return {output, exitCode};
+    FILE *p = popen(cmd.c_str(), "r");
+    if (!p) return {"", -1};
+    while (fgets(buf.data(), buf.size(), p)) out += buf.data();
+    int st = pclose(p);
+    return {out, WEXITSTATUS(st)};
 }
 
-// Helper: write a temp file with given content, return its path
-static std::string writeTempFile(const std::string &content, const std::string &suffix = ".txt") {
-    std::string path = "/tmp/zipper_test_input" + suffix;
+// temp file banao aur path return karo
+static std::string tmpFile(const std::string &content, const std::string &ext = ".txt") {
+    std::string path = "/tmp/zipper_test" + ext;
     std::ofstream f(path);
     f << content;
     return path;
 }
 
-// Req 8.3: fewer than 4 args → exit code 1
-TEST(ZipperCLI, FewerThan4ArgsExitsWithCode1) {
-    auto [out, code] = runCommand("./zipper compress 2>&1");
+// 4 se kam args pe exit code 1 aana chahiye
+TEST(CLI, TooFewArgsExits1) {
+    auto [out, code] = run("./zipper compress 2>&1");
     EXPECT_EQ(code, 1);
 }
 
-TEST(ZipperCLI, NoArgsExitsWithCode1) {
-    auto [out, code] = runCommand("./zipper 2>&1");
+TEST(CLI, NoArgsExits1) {
+    auto [out, code] = run("./zipper 2>&1");
     EXPECT_EQ(code, 1);
 }
 
-// Req 8.4: missing input file → JSON error + exit code 1
-TEST(ZipperCLI, MissingInputFileExitsWithCode1) {
-    auto [out, code] = runCommand("./zipper compress /tmp/nonexistent_file_xyz.txt /tmp/out.z 2>&1");
+// file na mile toh error aur exit code 1
+TEST(CLI, MissingFileExits1) {
+    auto [out, code] = run("./zipper compress /tmp/nope_xyz.txt /tmp/out.z 2>&1");
     EXPECT_EQ(code, 1);
     EXPECT_NE(out.find("error"), std::string::npos);
 }
 
-// Req 8.1: compress outputs valid JSON with all required fields
-TEST(ZipperCLI, CompressOutputsValidJSONWithRequiredFields) {
-    std::string inputPath = writeTempFile("hello world this is a test file with some repeated content aaa bbb ccc");
-    std::string outputPath = "/tmp/zipper_test_output.z";
+// compress pe valid JSON aana chahiye
+TEST(CLI, CompressOutputsJSON) {
+    std::string in  = tmpFile("hello world aaa bbb ccc repeated content");
+    std::string out = "/tmp/zipper_test_out.z";
+    auto [o, code]  = run("./zipper compress " + in + " " + out);
 
-    auto [out, code] = runCommand("./zipper compress " + inputPath + " " + outputPath);
+    EXPECT_EQ(code, 0) << o;
+    EXPECT_NE(o.find("entropy"),        std::string::npos);
+    EXPECT_NE(o.find("adaptiveMethod"), std::string::npos);
+    EXPECT_NE(o.find("adaptiveRatio"),  std::string::npos);
+    EXPECT_NE(o.find("huffmanRatio"),   std::string::npos);
+    EXPECT_NE(o.find("time"),           std::string::npos);
 
-    EXPECT_EQ(code, 0) << "zipper compress failed with output: " << out;
-
-    // Check all required JSON fields are present
-    EXPECT_NE(out.find("entropy"), std::string::npos)       << "Missing 'entropy' in: " << out;
-    EXPECT_NE(out.find("adaptiveMethod"), std::string::npos) << "Missing 'adaptiveMethod' in: " << out;
-    EXPECT_NE(out.find("adaptiveRatio"), std::string::npos)  << "Missing 'adaptiveRatio' in: " << out;
-    EXPECT_NE(out.find("huffmanRatio"), std::string::npos)   << "Missing 'huffmanRatio' in: " << out;
-    EXPECT_NE(out.find("time"), std::string::npos)           << "Missing 'time' in: " << out;
-
-    // Check output file was created
-    std::ifstream outFile(outputPath);
-    EXPECT_TRUE(outFile.good()) << "Output .z file was not created";
+    std::ifstream f(out);
+    EXPECT_TRUE(f.good());
 }
 
-// Req 8.2: decompress outputs {"status": "done"}
-TEST(ZipperCLI, DecompressOutputsStatusDone) {
-    // First compress a file to get a valid .z file
-    std::string inputPath = writeTempFile("hello world decompression test");
-    std::string compressedPath = "/tmp/zipper_test_decomp.z";
-    std::string decompressedPath = "/tmp/zipper_test_decomp_out.txt";
+// decompress pe status done aana chahiye
+TEST(CLI, DecompressOutputsDone) {
+    std::string in   = tmpFile("hello world decompress test");
+    std::string cmp  = "/tmp/zipper_test_decomp.z";
+    std::string dcmp = "/tmp/zipper_test_decomp_out.txt";
 
-    auto [compOut, compCode] = runCommand("./zipper compress " + inputPath + " " + compressedPath);
-    ASSERT_EQ(compCode, 0) << "Compress step failed: " << compOut;
+    auto [co, cc] = run("./zipper compress " + in + " " + cmp);
+    ASSERT_EQ(cc, 0) << co;
 
-    auto [out, code] = runCommand("./zipper decompress " + compressedPath + " " + decompressedPath);
-
-    EXPECT_EQ(code, 0) << "zipper decompress failed with output: " << out;
-    EXPECT_NE(out.find("status"), std::string::npos)  << "Missing 'status' in: " << out;
-    EXPECT_NE(out.find("done"), std::string::npos)    << "Missing 'done' in: " << out;
+    auto [o, code] = run("./zipper decompress " + cmp + " " + dcmp);
+    EXPECT_EQ(code, 0) << o;
+    EXPECT_NE(o.find("status"), std::string::npos);
+    EXPECT_NE(o.find("done"),   std::string::npos);
 }

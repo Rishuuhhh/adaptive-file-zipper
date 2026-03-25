@@ -11,121 +11,105 @@
 using namespace std;
 using namespace chrono;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Huffman ratio baseline: Shannon entropy estimate (theoretical lower bound)
-// ─────────────────────────────────────────────────────────────────────────────
-
-static double estimateHuffmanRatio(const string &data) {
-    if (data.empty()) return 1.0;
-    int freq[256] = {};
-    for (int i = 0; i < (int)data.size(); i++)
-        freq[(unsigned char)data[i]]++;
-    double H = 0.0;
-    double n = (double)data.size();
+// entropy se pata karo huffman kitna compress kar sakta hai
+static double estHuffRatio(const string &d) {
+    if (d.empty()) return 1.0;
+    int fr[256] = {};
+    for (int i = 0; i < (int)d.size(); i++)
+        fr[(unsigned char)d[i]]++;
+    double h = 0.0, n = (double)d.size();
     for (int i = 0; i < 256; i++) {
-        if (freq[i] > 0) {
-            double p = freq[i] / n;
-            H -= p * log2(p);
+        if (fr[i] > 0) {
+            double p = fr[i] / n;
+            h -= p * log2(p);
         }
     }
-    return (H * n / 8.0) / n;  // pure entropy ratio, no header overhead
+    return (h * n / 8.0) / n;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Candidate descriptor
-// ─────────────────────────────────────────────────────────────────────────────
-
-struct Candidate {
-    string method;
-    string payload;   // compressed bytes (no outer wrapper)
-    double ratio;
+// ek method ka naam, uska output aur ratio store karta hai
+struct Cand {
+    string meth;
+    string out;
+    double rat;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Adaptive compression: run RLE, global Huffman, block Huffman — pick best
-// ─────────────────────────────────────────────────────────────────────────────
+// teen methods try karo, jo best ho woh use karo
+CompressionResult runAdaptiveCompression(const string &d) {
+    auto t0 = high_resolution_clock::now();
 
-CompressionResult runAdaptiveCompression(const string &data) {
-    auto start = high_resolution_clock::now();
-
-    if (data.empty()) {
+    if (d.empty())
         return {"NONE", 0.0, 1.0, 1.0, 0.0, ""};
-    }
 
-    double ent = calculateEntropy(data);
-    double originalSize = (double)data.size();
-    double huffmanDisplayRatio = estimateHuffmanRatio(data);
+    double ent = calculateEntropy(d);
+    double orig = (double)d.size();
+    double hr = estHuffRatio(d);
 
-    // Near-random data: no method can help
+    // random data hai, compress karna bekaar hai
     if (ent >= 7.8) {
-        auto end = high_resolution_clock::now();
-        double t = duration<double, milli>(end - start).count();
-        string packed = packData("NONE", ent, "", data);
-        return {"NONE", ent, 1.0, huffmanDisplayRatio, t, packed};
+        auto t1 = high_resolution_clock::now();
+        double ms = duration<double, milli>(t1 - t0).count();
+        string pk = packData("NONE", ent, "", d);
+        return {"NONE", ent, 1.0, hr, ms, pk};
     }
 
-    // ── Strategy 1: RLE ───────────────────────────────────────────────────────
-    string rleOut = rleCompress(data);
-    double rleRatio = (double)rleOut.size() / originalSize;
+    // RLE try karo
+    string ro = rleCompress(d);
+    double rr = (double)ro.size() / orig;
 
-    // ── Strategy 2: Global canonical Huffman ─────────────────────────────────
-    string globalOut = globalHuffmanCompress(data);
-    double globalRatio = (double)globalOut.size() / originalSize;
+    // global huffman try karo
+    string go = globalHuffmanCompress(d);
+    double gr = (double)go.size() / orig;
 
-    // ── Strategy 3: Block-based canonical Huffman ─────────────────────────────
-    string blockOut = blockSplitCompress(data);
-    double blockRatio = (double)blockOut.size() / originalSize;
+    // block huffman try karo
+    string bo = blockSplitCompress(d);
+    double br = (double)bo.size() / orig;
 
-    // ── Pick the smallest ─────────────────────────────────────────────────────
-    vector<Candidate> candidates;
-    candidates.push_back({"RLE",          rleOut,    rleRatio});
-    candidates.push_back({"GLOBAL_HUFF",  globalOut, globalRatio});
-    candidates.push_back({"BLOCK_HUFF",   blockOut,  blockRatio});
+    // teeno mein se sabse chhota choose karo
+    vector<Cand> cv = {
+        {"RLE",         ro, rr},
+        {"GLOBAL_HUFF", go, gr},
+        {"BLOCK_HUFF",  bo, br}
+    };
 
-    int bestIdx = 0;
-    for (int i = 1; i < (int)candidates.size(); i++)
-        if (candidates[i].ratio < candidates[bestIdx].ratio) bestIdx = i;
+    int bi = 0;
+    for (int i = 1; i < (int)cv.size(); i++)
+        if (cv[i].rat < cv[bi].rat) bi = i;
 
-    string chosenMethod = candidates[bestIdx].method;
-    string payload      = candidates[bestIdx].payload;
-    double adaptiveRatio = candidates[bestIdx].ratio;
+    string meth = cv[bi].meth;
+    string pay  = cv[bi].out;
+    double ar   = cv[bi].rat;
 
-    auto end = high_resolution_clock::now();
-    double timeTaken = duration<double, milli>(end - start).count();
+    auto t1 = high_resolution_clock::now();
+    double ms = duration<double, milli>(t1 - t0).count();
 
-    // No codeMap needed — all encoding metadata is embedded in the payload
-    string packed = packData(chosenMethod, ent, "", payload);
-    return {chosenMethod, ent, adaptiveRatio, huffmanDisplayRatio, timeTaken, packed};
+    string pk = packData(meth, ent, "", pay);
+    return {meth, ent, ar, hr, ms, pk};
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Decompression: dispatch by stored method tag
-// ─────────────────────────────────────────────────────────────────────────────
+// method tag dekh ke sahi decompress karo
+string runDecompression(const string &pk) {
+    string meth, cms, pay;
+    double ent;
+    unpackData(pk, meth, ent, cms, pay);
 
-string runDecompression(const string &packedData) {
-    string method, codeMapSerialized, payload;
-    double entropy;
-    unpackData(packedData, method, entropy, codeMapSerialized, payload);
+    if (meth == "RLE")
+        return rleDecompress(pay);
 
-    if (method == "RLE") {
-        return rleDecompress(payload);
-    }
-    if (method == "GLOBAL_HUFF" || method == "BLOCK_HUFF") {
-        // blockHuffmanDecompress handles both 'G' and 'B' tagged payloads
-        return blockHuffmanDecompress(payload, {});
-    }
-    if (method == "NONE") {
-        return payload;
-    }
+    if (meth == "GLOBAL_HUFF" || meth == "BLOCK_HUFF")
+        return blockHuffmanDecompress(pay, {});
 
-    // Legacy methods from older compressed files
-    if (method == "BLOCK_HUFFMAN" || method == "RLE_HUFFMAN") {
-        auto codeMap = deserializeCodeMap(codeMapSerialized);
-        if (method == "RLE_HUFFMAN") {
-            string rleData = blockHuffmanDecompress(payload, codeMap);
-            return rleDecompress(rleData);
+    if (meth == "NONE")
+        return pay;
+
+    // purane files ke liye
+    if (meth == "BLOCK_HUFFMAN" || meth == "RLE_HUFFMAN") {
+        auto cm = deserializeCodeMap(cms);
+        if (meth == "RLE_HUFFMAN") {
+            string rd = blockHuffmanDecompress(pay, cm);
+            return rleDecompress(rd);
         }
-        return blockHuffmanDecompress(payload, codeMap);
+        return blockHuffmanDecompress(pay, cm);
     }
 
     return "";

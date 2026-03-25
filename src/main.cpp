@@ -6,11 +6,8 @@
 
 using namespace std;
 
-/*
-Usage:
-./zipper compress input.txt output.z
-./zipper decompress input.z output.txt
-*/
+// usage: ./zipper compress input.txt output.z
+//        ./zipper decompress input.z output.txt
 
 int main(int argc, char *argv[]) {
 
@@ -20,42 +17,39 @@ int main(int argc, char *argv[]) {
     }
 
     string mode = argv[1];
-    string inputFile = argv[2];
-    string outputFile = argv[3];
+    string fin  = argv[2];
+    string fout = argv[3];
 
     if (mode == "compress") {
 
-        if (!filesystem::exists(inputFile)) {
+        if (!filesystem::exists(fin)) {
             cout << "{\"error\": \"Could not read file\"}\n";
             return 1;
         }
 
-        string data = readFile(inputFile);
+        string d = readFile(fin);
+        CompressionResult r = runAdaptiveCompression(d);
+        writeFile(fout, r.compressedData);
 
-        CompressionResult res = runAdaptiveCompression(data);
-
-        writeFile(outputFile, res.compressedData);
-
-        // JSON output (important for Node.js)
+        // node.js yeh JSON padhta hai
         cout << "{\n";
-        cout << "\"entropy\": " << res.entropy << ",\n";
-        cout << "\"adaptiveMethod\": \"" << res.method << "\",\n";
-        cout << "\"adaptiveRatio\": " << res.adaptiveRatio << ",\n";
-        cout << "\"huffmanRatio\": " << res.huffmanRatio << ",\n";
-        cout << "\"time\": " << res.timeTaken << "\n";
+        cout << "\"entropy\": "        << r.entropy       << ",\n";
+        cout << "\"adaptiveMethod\": \"" << r.method      << "\",\n";
+        cout << "\"adaptiveRatio\": "  << r.adaptiveRatio << ",\n";
+        cout << "\"huffmanRatio\": "   << r.huffmanRatio  << ",\n";
+        cout << "\"time\": "           << r.timeTaken     << "\n";
         cout << "}\n";
 
     } else if (mode == "decompress") {
 
-        if (!filesystem::exists(inputFile)) {
+        if (!filesystem::exists(fin)) {
             cout << "{\"error\": \"Could not read file\"}\n";
             return 1;
         }
 
-        string packed = readFile(inputFile);
-        string original = runDecompression(packed);
-
-        writeFile(outputFile, original);
+        string pk  = readFile(fin);
+        string org = runDecompression(pk);
+        writeFile(fout, org);
 
         cout << "{ \"status\": \"done\" }\n";
     }

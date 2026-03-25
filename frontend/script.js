@@ -1,37 +1,29 @@
 const API = "";
 
-// ── Formatting helpers ────────────────────────────────────────────────────────
+// number format helpers
+function fmtEnt(v)  { return `${Number(v).toFixed(4)} bits/char`; }
+function fmtRat(v)  { return `${(Number(v) * 100).toFixed(1)}%`; }
+function fmtTime(v) { return `${Number(v).toFixed(2)} ms`; }
 
-function formatEntropy(val) {
-    return `${Number(val).toFixed(4)} bits/char`;
-}
-
-function formatRatio(val) {
-    return `${(Number(val) * 100).toFixed(1)}%`;
-}
-
-function formatTime(val) {
-    return `${Number(val).toFixed(2)} ms`;
-}
-
-// ── UI helpers ────────────────────────────────────────────────────────────────
-
-function showError(msg) {
-    const err = document.getElementById("error");
-    err.innerText = msg;
-    err.classList.remove("hidden");
+// error message dikhao
+function showErr(msg) {
+    const el = document.getElementById("error");
+    el.innerText = msg;
+    el.classList.remove("hidden");
     document.getElementById("status").classList.add("hidden");
     document.getElementById("stats").classList.add("hidden");
 }
 
+// status message dikhao
 function showStatus(msg) {
-    const status = document.getElementById("status");
-    status.innerText = msg;
-    status.classList.remove("hidden");
+    const el = document.getElementById("status");
+    el.innerText = msg;
+    el.classList.remove("hidden");
     document.getElementById("error").classList.add("hidden");
 }
 
-function clearMessages() {
+// messages chhupao
+function clearMsgs() {
     document.getElementById("error").classList.add("hidden");
     document.getElementById("status").classList.add("hidden");
 }
@@ -40,120 +32,104 @@ function showResults() {
     document.getElementById("results").classList.remove("hidden");
 }
 
-// ── File selection & drag-drop ────────────────────────────────────────────────
-
+// file select ya drag-drop
 document.getElementById("fileInput").addEventListener("change", function () {
-    updateSelectedFile(this.files[0]);
+    setFile(this.files[0]);
 });
 
-const dropZone = document.getElementById("dropZone");
+const dz = document.getElementById("dropZone");
 
-dropZone.addEventListener("click", () => document.getElementById("fileInput").click());
+dz.addEventListener("click", () => document.getElementById("fileInput").click());
 
-dropZone.addEventListener("dragover", (e) => {
+dz.addEventListener("dragover", (e) => {
     e.preventDefault();
-    dropZone.classList.add("drag-over");
+    dz.classList.add("drag-over");
 });
 
-dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+dz.addEventListener("dragleave", () => dz.classList.remove("drag-over"));
 
-dropZone.addEventListener("drop", (e) => {
+dz.addEventListener("drop", (e) => {
     e.preventDefault();
-    dropZone.classList.remove("drag-over");
-    const file = e.dataTransfer.files[0];
-    if (file) {
-        // Assign to the file input so the rest of the code can read it
+    dz.classList.remove("drag-over");
+    const f = e.dataTransfer.files[0];
+    if (f) {
         const dt = new DataTransfer();
-        dt.items.add(file);
+        dt.items.add(f);
         document.getElementById("fileInput").files = dt.files;
-        updateSelectedFile(file);
+        setFile(f);
     }
 });
 
-function updateSelectedFile(file) {
-    if (!file) return;
-    const el = document.getElementById("selectedFile");
-    document.getElementById("fileName").innerText = file.name;
-    el.classList.remove("hidden");
+function setFile(f) {
+    if (!f) return;
+    document.getElementById("fileName").innerText = f.name;
+    document.getElementById("selectedFile").classList.remove("hidden");
 }
 
-// ── Compress ──────────────────────────────────────────────────────────────────
-
+// compress button
 async function compressFile() {
-    const fileInput = document.getElementById("fileInput");
-
-    if (!fileInput.files.length) {
-        alert("Please select a file first");
-        return;
-    }
+    const fi = document.getElementById("fileInput");
+    if (!fi.files.length) { alert("Please select a file first"); return; }
 
     const btn = document.getElementById("compressBtn");
     btn.disabled = true;
-    btn.innerHTML = `<span class="btn-icon">⏳</span> Compressing...`;
+    btn.innerHTML = '<span class="btn-icon">⏳</span> Compressing...';
 
-    const formData = new FormData();
-    formData.append("file", fileInput.files[0]);
+    const fd = new FormData();
+    fd.append("file", fi.files[0]);
 
     try {
-        const res = await fetch(`/compress`, { method: "POST", body: formData });
+        const res  = await fetch('/compress', { method: "POST", body: fd });
         const data = await res.json();
 
         showResults();
 
-        if (!res.ok) {
-            showError(data.error || "Compression failed");
-            return;
-        }
+        if (!res.ok) { showErr(data.error || "Compression failed"); return; }
 
-        clearMessages();
+        clearMsgs();
 
-        document.getElementById("entropy").innerText = formatEntropy(data.entropy);
-        document.getElementById("method").innerText  = data.adaptiveMethod;
-        document.getElementById("adaptive").innerText = formatRatio(data.adaptiveRatio);
-        document.getElementById("huffman").innerText  = formatRatio(data.huffmanRatio);
-        document.getElementById("time").innerText     = formatTime(data.time);
+        document.getElementById("entropy").innerText  = fmtEnt(data.entropy);
+        document.getElementById("method").innerText   = data.adaptiveMethod;
+        document.getElementById("adaptive").innerText = fmtRat(data.adaptiveRatio);
+        document.getElementById("huffman").innerText  = fmtRat(data.huffmanRatio);
+        document.getElementById("time").innerText     = fmtTime(data.time);
 
         document.getElementById("stats").classList.remove("hidden");
 
-        const link = document.getElementById("downloadLink");
-        link.href = data.download;
-        link.classList.remove("hidden");
+        const lnk = document.getElementById("downloadLink");
+        lnk.href = data.download;
+        lnk.classList.remove("hidden");
 
-    } catch (err) {
+    } catch (e) {
         showResults();
-        showError("Could not reach the server. Is it running on port 3000?");
+        showErr("Could not reach the server. Is it running on port 3000?");
     } finally {
         btn.disabled = false;
-        btn.innerHTML = `<span class="btn-icon">🗜️</span> Compress`;
+        btn.innerHTML = '<span class="btn-icon">🗜️</span> Compress';
     }
 }
 
-// ── Decompress ────────────────────────────────────────────────────────────────
-
+// decompress button
 async function decompressFile() {
-    const fileInput = document.getElementById("fileInput");
-
-    if (!fileInput.files.length) {
-        alert("Please select a file first");
-        return;
-    }
+    const fi = document.getElementById("fileInput");
+    if (!fi.files.length) { alert("Please select a file first"); return; }
 
     const btn = document.getElementById("decompressBtn");
     btn.disabled = true;
-    btn.innerHTML = `<span class="btn-icon">⏳</span> Decompressing...`;
+    btn.innerHTML = '<span class="btn-icon">⏳</span> Decompressing...';
 
-    const formData = new FormData();
-    formData.append("file", fileInput.files[0]);
+    const fd = new FormData();
+    fd.append("file", fi.files[0]);
 
     try {
-        const res = await fetch(`/decompress`, { method: "POST", body: formData });
+        const res = await fetch('/decompress', { method: "POST", body: fd });
 
         showResults();
 
         if (!res.ok) {
             let msg = "Decompression failed";
             try { msg = (await res.json()).error || msg; } catch (_) {}
-            showError(msg);
+            showErr(msg);
             return;
         }
 
@@ -167,16 +143,16 @@ async function decompressFile() {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
 
-        clearMessages();
+        clearMsgs();
         document.getElementById("stats").classList.add("hidden");
         document.getElementById("downloadLink").classList.add("hidden");
-        showStatus("✅ Decompression successful — file downloaded");
+        showStatus("Decompression done — file downloaded");
 
-    } catch (err) {
+    } catch (e) {
         showResults();
-        showError("Could not reach the server. Is it running on port 3000?");
+        showErr("Could not reach the server. Is it running on port 3000?");
     } finally {
         btn.disabled = false;
-        btn.innerHTML = `<span class="btn-icon">📂</span> Decompress`;
+        btn.innerHTML = '<span class="btn-icon">📂</span> Decompress';
     }
 }
