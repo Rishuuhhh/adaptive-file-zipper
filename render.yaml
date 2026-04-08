@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: adaptive-file-zipper
+    env: node
+    rootDir: .
+    buildCommand: |
+      make build
+      cd backend && npm ci --omit=dev
+    startCommand: cd backend && npm start
+    envVars:
+      - key: ZIPPER_PATH
+        value: /opt/render/project/src/zipper
+      - key: NODE_ENV
+        value: production

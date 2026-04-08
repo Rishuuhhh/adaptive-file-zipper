@@ -57,12 +57,13 @@ app.post("/compress", upload.single("file"), (req, res) => {
     const out = path.join(resultDir, "compressed_" + req.file.filename + ".z");
     execFile(zipperPath, ["compress", inp, out], (err, stdout, stderr) => {
         if (err) {
+            const detail = (stderr || err.message || "Unknown execution error").trim();
             console.error("Compression failed", {
                 message: err.message,
                 code: err.code,
                 stderr
             });
-            return res.status(500).json({ error: "Compression failed" });
+            return res.status(500).json({ error: "Compression failed", detail });
         }
         let json;
         try {
@@ -88,12 +89,13 @@ app.post("/decompress", upload.single("file"), (req, res) => {
     const out = path.join(resultDir, "decompressed_" + req.file.filename + ".txt");
     execFile(zipperPath, ["decompress", inp, out], (err, _stdout, stderr) => {
         if (err) {
+            const detail = (stderr || err.message || "Unknown execution error").trim();
             console.error("Decompression failed", {
                 message: err.message,
                 code: err.code,
                 stderr
             });
-            return res.status(500).json({ error: "Decompression failed" });
+            return res.status(500).json({ error: "Decompression failed", detail });
         }
         res.download(out);
     });
