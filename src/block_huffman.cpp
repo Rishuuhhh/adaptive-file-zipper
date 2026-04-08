@@ -5,31 +5,31 @@
 
 using namespace std;
 
-// 4KB se chhota input ho toh global huffman use karo
+// Use global Huffman mode for inputs smaller than 4 KB.
 static const int SML_THRESH = 4 * 1024;
-// har block 32KB ka hoga
+// Block size used by block-split mode.
 static const int BLK_SZ = 32 * 1024;
 
-// huffman tree ka ek node
+// A single Huffman tree node.
 struct CNode {
     int sym;  // -1 = internal, 0-255 = leaf byte
-    int frq;  // kitni baar aaya
+    int frq;  // Symbol frequency
     CNode *l, *r;
     CNode(int s, int f) : sym(s), frq(f), l(0), r(0) {}
 };
 
-// min-heap ke liye: kam frequency wala pehle
+// Comparator for a min-heap by frequency.
 struct CNodeCmp {
     bool operator()(CNode *a, CNode *b) const { return a->frq > b->frq; }
 };
 
-// frequency array se huffman tree banao
+// Build Huffman tree from a frequency table.
 static CNode* buildTree(int fr[256]) {
     priority_queue<CNode*, vector<CNode*>, CNodeCmp> pq;
     for (int i = 0; i < 256; i++)
         if (fr[i] > 0) pq.push(new CNode(i, fr[i]));
     if (pq.empty()) return 0;
-    // do chhote nodes ko merge karte raho
+    // Keep merging the two least-frequent nodes.
     while ((int)pq.size() > 1) {
         CNode *a = pq.top(); pq.pop();
         CNode *b = pq.top(); pq.pop();
@@ -40,25 +40,25 @@ static CNode* buildTree(int fr[256]) {
     return pq.top();
 }
 
-// tree ki memory free karo
+// Free allocated Huffman tree memory.
 static void freeTree(CNode *n) {
     if (!n) return;
     freeTree(n->l); freeTree(n->r);
     delete n;
 }
 
-// tree traverse karke har symbol ki bit length nikalo
+// Traverse the tree and compute bit-length per symbol.
 static void getLen(CNode *n, int dep, int ln[256]) {
     if (!n) return;
     if (n->sym >= 0) {
-        ln[n->sym] = (dep == 0) ? 1 : dep; // single symbol ho toh 1 bit
+        ln[n->sym] = (dep == 0) ? 1 : dep; // Single-symbol alphabet still needs 1 bit.
         return;
     }
     getLen(n->l, dep + 1, ln);
     getLen(n->r, dep + 1, ln);
 }
 
-// lengths se canonical huffman codes banao
+// Build canonical Huffman codes from code lengths.
 static void mkCodes(int ln[256], unsigned int cd[256]) {
     vector<pair<int,int>> sv;
     for (int i = 0; i < 256; i++)
@@ -69,13 +69,13 @@ static void mkCodes(int ln[256], unsigned int cd[256]) {
     int pl = 0;
     for (auto &x : sv) {
         int len = x.first, sym = x.second;
-        c <<= (len - pl); // length badhi toh shift karo
+        c <<= (len - pl); // Shift when moving to longer code lengths.
         cd[sym] = c++;
         pl = len;
     }
 }
 
-// data ko bits mein pack karo (MSB first)
+    // Pack bytes into a bitstream (MSB first).
 static void encBits(const char *d, int dlen,
                     int ln[256], unsigned int cd[256],
                     vector<char> &pb, int &pad) {
@@ -92,11 +92,11 @@ static void encBits(const char *d, int dlen,
     pad = 0;
     if (cnt > 0) {
         pad = 8 - cnt;
-        pb.push_back((char)(cur << pad)); // bacha hua byte, zeros se fill
+        pb.push_back((char)(cur << pad)); // Pad remaining bits with zeros.
     }
 }
 
-// header likho: [N][symbols][lengths][padding]
+    // Write header format: [N][symbols][lengths][padding].
 static void wHdr(int ln[256], int pad, string &out) {
     vector<int> sv;
     for (int i = 0; i < 256; i++)
@@ -108,7 +108,7 @@ static void wHdr(int ln[256], int pad, string &out) {
     out.push_back((char)pad);
 }
 
-// header padho, lengths aur padding fill karo
+// Parse header and fill lengths/padding.
 static int rHdr(const string &s, int pos, int ln[256], int &pad) {
     int st = pos;
     int N = (unsigned char)s[pos++];
@@ -119,7 +119,7 @@ static int rHdr(const string &s, int pos, int ln[256], int &pad) {
     return pos - st;
 }
 
-// compressed bits ko wapas original bytes mein convert karo
+// Decode compressed bits back to original bytes.
 static string decBits(const string &s, int ds, int de,
                        int pad, int ln[256], unsigned int cd[256]) {
     unordered_map<unsigned int, int> tbl;
@@ -132,14 +132,14 @@ static string decBits(const string &s, int ds, int de,
         }
     }
 
-    int tot = (de - ds) * 8 - pad; // valid bits ki count
+    int tot = (de - ds) * 8 - pad; // Number of valid data bits.
     int br = 0;
     unsigned int buf = 0;
     int bb = 0, si = ds;
     string res;
 
     while (br < tot) {
-        // buffer mein bits load karo
+        // Load more bits into the decode buffer.
         while (bb < mx && si < de) {
             buf = (buf << 8) | (unsigned char)s[si++];
             bb += 8;
@@ -160,12 +160,12 @@ static string decBits(const string &s, int ds, int de,
                 break;
             }
         }
-        if (!ok) break; // match nahi mila, data kharab ho sakta hai
+        if (!ok) break; // No match found, likely corrupted data.
     }
     return res;
 }
 
-// poore input ko ek huffman tree se compress karo
+    // Compress complete input using a single Huffman model.
 string globalHuffmanCompress(const string &d) {
     int fr[256] = {};
     for (int i = 0; i < (int)d.size(); i++)
@@ -185,7 +185,7 @@ string globalHuffmanCompress(const string &d) {
     int pad = 0;
     encBits(d.data(), (int)d.size(), ln, cd, pb, pad);
 
-    // 'G' = global mode
+    // 'G' marks global mode.
     string out;
     out.push_back('G');
     wHdr(ln, pad, out);
@@ -193,7 +193,7 @@ string globalHuffmanCompress(const string &d) {
     return out;
 }
 
-// int ko 4 bytes mein likho (big-endian)
+// Write 32-bit integer as 4 bytes (big-endian).
 static void wI32(string &out, int v) {
     out.push_back((char)((v >> 24) & 0xFF));
     out.push_back((char)((v >> 16) & 0xFF));
@@ -201,7 +201,7 @@ static void wI32(string &out, int v) {
     out.push_back((char)( v        & 0xFF));
 }
 
-// 4 bytes se int padho (big-endian)
+// Read 32-bit integer from 4 bytes (big-endian).
 static int rI32(const string &s, int p) {
     return ((unsigned char)s[p]   << 24)
          | ((unsigned char)s[p+1] << 16)
@@ -209,18 +209,18 @@ static int rI32(const string &s, int p) {
          |  (unsigned char)s[p+3];
 }
 
-// input ko 32KB blocks mein tod ke har block alag compress karo
+// Split input into 32 KB blocks and compress each independently.
 string blockSplitCompress(const string &d) {
     int n = (int)d.size();
-    int nb = (n + BLK_SZ - 1) / BLK_SZ; // kitne blocks
+    int nb = (n + BLK_SZ - 1) / BLK_SZ; // Number of blocks.
 
     string out;
-    out.push_back('B'); // 'B' = block mode
+    out.push_back('B'); // 'B' marks block mode.
     wI32(out, nb);
 
     for (int b = 0; b < nb; b++) {
         int bs = b * BLK_SZ;
-        int bl = (bs + BLK_SZ <= n) ? BLK_SZ : (n - bs); // last block chhota ho sakta hai
+        int bl = (bs + BLK_SZ <= n) ? BLK_SZ : (n - bs); // Last block can be shorter.
 
         int fr[256] = {};
         for (int i = bs; i < bs + bl; i++)
@@ -248,17 +248,17 @@ string blockSplitCompress(const string &d) {
     return out;
 }
 
-// compress karo — input size ke hisaab se best method choose karo
+// Compress by selecting the best strategy for current input.
 BlockResult blockHuffmanCompress(const string &d) {
     if (d.empty()) return {"", {}};
 
-    // sab bytes same hain kya
+    // Fast path: all bytes are identical.
     {
         bool same = true;
         for (int i = 1; i < (int)d.size(); i++)
             if (d[i] != d[0]) { same = false; break; }
         if (same) {
-            // sirf ek symbol, 1 bit kaafi hai
+            // Single symbol stream: a 1-bit code is sufficient.
             string out;
             out.push_back('G');
             int ln[256] = {};
@@ -275,11 +275,11 @@ BlockResult blockHuffmanCompress(const string &d) {
 
     int n = (int)d.size();
 
-    // chhota input, global hi theek hai
+    // Small input: global mode is usually better.
     if (n < SML_THRESH)
         return {globalHuffmanCompress(d), {}};
 
-    // dono try karo, jo chhota ho woh lo
+    // Try both and keep the smaller output.
     string g = globalHuffmanCompress(d);
     string bk = blockSplitCompress(d);
 
@@ -288,12 +288,12 @@ BlockResult blockHuffmanCompress(const string &d) {
     return {bk, {}};
 }
 
-// decompress karo — pehla byte dekh ke mode pata karo
+// Decompress by reading mode from the first byte.
 string blockHuffmanDecompress(const string &enc,
                                const unordered_map<string, string> &) {
     if (enc.empty()) return "";
 
-    char mode = enc[0]; // 'G' ya 'B'
+    char mode = enc[0]; // 'G' or 'B'
 
     if (mode == 'G') {
         int pos = 1;
@@ -305,7 +305,7 @@ string blockHuffmanDecompress(const string &enc,
         unsigned int cd[256] = {};
         mkCodes(ln, cd);
 
-        // single symbol edge case
+        // Single-symbol edge case.
         int N = (unsigned char)enc[1];
         if (N == 1) {
             int sym = (unsigned char)enc[2];
@@ -340,5 +340,5 @@ string blockHuffmanDecompress(const string &enc,
         return res;
     }
 
-    return ""; // unknown mode
+    return ""; // Unknown mode.
 }

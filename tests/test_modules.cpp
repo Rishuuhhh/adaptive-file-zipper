@@ -11,18 +11,18 @@
 #include <string>
 #include <sstream>
 
-// khaali input pe entropy 0 honi chahiye
+// Entropy should be 0 for empty input.
 TEST(Entropy, EmptyInputReturnsZero) {
     EXPECT_DOUBLE_EQ(calculateEntropy(""), 0.0);
 }
 
-// sab same chars ho toh entropy 0 hogi
+// Entropy should be 0 when all characters are identical.
 TEST(Entropy, AllSameCharReturnsZero) {
     EXPECT_DOUBLE_EQ(calculateEntropy("aaaaaaa"), 0.0);
     EXPECT_DOUBLE_EQ(calculateEntropy("z"), 0.0);
 }
 
-// entropy hamesha 0 se 8 ke beech honi chahiye
+// Entropy should always stay within [0, 8].
 RC_GTEST_PROP(Entropy, AlwaysInRange, ()) {
     auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
     double e = calculateEntropy(in);
@@ -30,7 +30,7 @@ RC_GTEST_PROP(Entropy, AlwaysInRange, ()) {
     RC_ASSERT(e <= 8.0);
 }
 
-// n distinct chars ho toh entropy = log2(n) hogi
+// For n distinct symbols with uniform distribution, entropy = log2(n).
 RC_GTEST_PROP(Entropy, UniformMaximizesEntropy, ()) {
     int n = *rc::gen::inRange<int>(2, 257);
     std::string in;
@@ -40,7 +40,7 @@ RC_GTEST_PROP(Entropy, UniformMaximizesEntropy, ()) {
     RC_ASSERT(std::abs(act - exp) < 1e-9);
 }
 
-// RLE output format sahi hona chahiye
+// RLE output format should be valid.
 RC_GTEST_PROP(RLE, OutputFormatIsWellFormed, ()) {
     auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
     std::string c = rleCompress(in);
@@ -62,13 +62,13 @@ RC_GTEST_PROP(RLE, OutputFormatIsWellFormed, ()) {
     }
 }
 
-// RLE compress -> decompress wapas original dena chahiye
+// RLE compress -> decompress should restore original input.
 RC_GTEST_PROP(RLE, RoundTrip, ()) {
     auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
     RC_ASSERT(rleDecompress(rleCompress(in)) == in);
 }
 
-// block huffman output valid hona chahiye
+// Block Huffman output should be a valid bit string.
 RC_GTEST_PROP(BlockHuffman, OutputIsValidBitString, ()) {
     auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
     BlockResult r = blockHuffmanCompress(in);
@@ -77,14 +77,14 @@ RC_GTEST_PROP(BlockHuffman, OutputIsValidBitString, ()) {
     RC_ASSERT(!r.codeMap.empty());
 }
 
-// block huffman round-trip
+// Block Huffman round-trip.
 RC_GTEST_PROP(BlockHuffman, RoundTrip, ()) {
     auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
     BlockResult r = blockHuffmanCompress(in);
     RC_ASSERT(blockHuffmanDecompress(r.encoded, r.codeMap) == in);
 }
 
-// khaali input pe NONE method aana chahiye
+// Empty input should select NONE method.
 TEST(Controller, EmptyInputReturnsNone) {
     CompressionResult r = runAdaptiveCompression("");
     EXPECT_EQ(r.method, "NONE");
@@ -93,7 +93,7 @@ TEST(Controller, EmptyInputReturnsNone) {
     EXPECT_TRUE(r.compressedData.empty());
 }
 
-// unknown method pe khaali string aani chahiye
+// Unknown method should return an empty output.
 TEST(Controller, UnknownMethodReturnsEmpty) {
     std::string pk = packData("UNKNOWN", 0.0, "", "some payload");
     EXPECT_EQ(runDecompression(pk), "");

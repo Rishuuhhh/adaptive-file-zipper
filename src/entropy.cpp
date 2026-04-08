@@ -4,7 +4,7 @@
 
 using namespace std;
 
-// har byte ki frequency count karo, phir shannon entropy nikalo
+// Count byte frequencies, then compute Shannon entropy.
 double calculateEntropy(const string &d) {
     if (d.empty()) return 0.0;
 

@@ -4,7 +4,7 @@
 
 using namespace std;
 
-// huffman tree ka node
+// Huffman tree node.
 struct HNode {
     int sym; // -1 = internal, 0-255 = leaf
     int frq;
@@ -16,7 +16,7 @@ struct HCmp {
     bool operator()(HNode *a, HNode *b) const { return a->frq > b->frq; }
 };
 
-// tree traverse karke har symbol ka code nikalo
+// Traverse the tree and build symbol codes.
 static void getCodes(HNode *n, string &pre, unordered_map<int, string> &out) {
     if (!n) return;
     if (!n->l && !n->r) {
@@ -33,7 +33,7 @@ static void freeTree(HNode *n) {
     delete n;
 }
 
-// bit string ko bytes mein pack karo, pehla byte = padding count
+// Pack bit string into bytes; first byte stores padding count.
 static string packBits(const string &bits) {
     int pad = (8 - (int)bits.size() % 8) % 8;
     string out;
@@ -47,7 +47,7 @@ static string packBits(const string &bits) {
     return out;
 }
 
-// bytes se bit string wapas nikalo
+// Reconstruct bit string from packed bytes.
 static string unpackBits(const string &pk) {
     if (pk.empty()) return "";
     int pad = (unsigned char)pk[0];

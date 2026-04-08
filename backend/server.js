@@ -9,7 +9,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// frontend files serve karo
+// Serve frontend static files.
 app.use(express.static(path.join(__dirname, "../frontend")));
 
 app.get("/", (req, res) => {
@@ -20,11 +20,11 @@ const zipperPath = path.join(__dirname, "../zipper");
 const uploadDir  = path.join(__dirname, "../data");
 const resultDir  = path.join(__dirname, "../results");
 
-// folders nahi hain toh banao
+// Create data/result directories if they do not exist.
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 if (!fs.existsSync(resultDir)) fs.mkdirSync(resultDir);
 
-// uploaded file ka naam unique rakho
+// Keep uploaded filenames unique.
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadDir),
     filename:    (req, file, cb) => cb(null, Date.now() + "_" + file.originalname)
@@ -32,7 +32,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// compress endpoint
+// Compress endpoint.
 app.post("/compress", upload.single("file"), (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
@@ -55,7 +55,7 @@ app.post("/compress", upload.single("file"), (req, res) => {
     });
 });
 
-// decompress endpoint
+// Decompress endpoint.
 app.post("/decompress", upload.single("file"), (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
@@ -72,7 +72,7 @@ app.post("/decompress", upload.single("file"), (req, res) => {
     });
 });
 
-// compressed file download karo
+// Download endpoint for compressed files.
 app.get("/download", (req, res) => {
     const fp = req.query.path;
     if (!fs.existsSync(fp)) return res.status(404).send("File not found");

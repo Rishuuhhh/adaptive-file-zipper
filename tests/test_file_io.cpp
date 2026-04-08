@@ -9,7 +9,7 @@
 #include <string>
 #include <unordered_map>
 
-// codeMap serialize -> deserialize wapas same hona chahiye
+// codeMap serialize -> deserialize should preserve content.
 RC_GTEST_PROP(FileIO, CodeMapRoundTrip, ()) {
     auto m = *rc::gen::container<std::unordered_map<std::string, std::string>>(
         rc::gen::arbitrary<std::string>(),
@@ -18,7 +18,7 @@ RC_GTEST_PROP(FileIO, CodeMapRoundTrip, ()) {
     RC_ASSERT(deserializeCodeMap(serializeCodeMap(m)) == m);
 }
 
-// pack -> unpack wapas same data dena chahiye
+// pack -> unpack should preserve all fields.
 RC_GTEST_PROP(FileIO, PackRoundTrip, ()) {
     auto meth = *rc::gen::map(
         rc::gen::arbitrary<std::string>(),

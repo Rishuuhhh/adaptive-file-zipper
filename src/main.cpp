@@ -6,7 +6,7 @@
 
 using namespace std;
 
-// usage: ./zipper compress input.txt output.z
+// Usage: ./zipper compress input.txt output.z
 //        ./zipper decompress input.z output.txt
 
 int main(int argc, char *argv[]) {
@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
         CompressionResult r = runAdaptiveCompression(d);
         writeFile(fout, r.compressedData);
 
-        // node.js yeh JSON padhta hai
+        // Node.js backend parses this JSON output.
         cout << "{\n";
         cout << "\"entropy\": "        << r.entropy       << ",\n";
         cout << "\"adaptiveMethod\": \"" << r.method      << "\",\n";

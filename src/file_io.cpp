@@ -4,7 +4,7 @@
 
 using namespace std;
 
-// file ko binary mode mein padhlo
+// Read a file in binary mode.
 string readFile(const string &fn) {
     ifstream f(fn, ios::binary);
     stringstream buf;
@@ -12,13 +12,13 @@ string readFile(const string &fn) {
     return buf.str();
 }
 
-// file ko binary mode mein likho
+// Write a file in binary mode.
 void writeFile(const string &fn, const string &d) {
     ofstream f(fn, ios::binary);
     f << d;
 }
 
-// codeMap ko text format mein serialize karo
+// Serialize codeMap to a text representation.
 string serializeCodeMap(const unordered_map<string, string> &cm) {
     string res;
     for (auto &e : cm) {
@@ -30,7 +30,7 @@ string serializeCodeMap(const unordered_map<string, string> &cm) {
     return res;
 }
 
-// serialized text se codeMap wapas banao
+// Rebuild codeMap from serialized text.
 unordered_map<string, string> deserializeCodeMap(const string &s) {
     unordered_map<string, string> cm;
     int pos = 0, n = (int)s.size();
@@ -59,7 +59,7 @@ unordered_map<string, string> deserializeCodeMap(const string &s) {
     return cm;
 }
 
-// compressed data ko header ke saath pack karo
+// Pack compressed payload with metadata header.
 string packData(const string &meth, double ent,
                 const string &cms, const string &pay) {
     return meth + "\n"
@@ -69,7 +69,7 @@ string packData(const string &meth, double ent,
          + pay;
 }
 
-// packed data se method, entropy, codemap aur payload nikalo
+// Unpack method, entropy, codemap, and payload from packed data.
 void unpackData(const string &in, string &meth, double &ent,
                 string &cms, string &pay) {
     int pos = 0, n = (int)in.size();

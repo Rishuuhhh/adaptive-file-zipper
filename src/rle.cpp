@@ -3,7 +3,7 @@
 
 using namespace std;
 
-// har run ko: [char][count_hi][count_lo] format mein store karo (max 65535 per run)
+// Store each run as [char][count_hi][count_lo] (max run length: 65535).
 
 string rleCompress(const string &d) {
     if (d.empty()) return "";
@@ -14,12 +14,12 @@ string rleCompress(const string &d) {
     while (i < n) {
         char c = d[i];
         int j = i + 1;
-        // same char kitni baar repeat ho raha hai
+        // Count how many times this character repeats consecutively.
         while (j < n && d[j] == c && (j - i) < 65535) j++;
         int cnt = j - i;
         out.push_back(c);
-        out.push_back((char)((cnt >> 8) & 0xFF)); // count ka high byte
-        out.push_back((char)(cnt & 0xFF));         // count ka low byte
+        out.push_back((char)((cnt >> 8) & 0xFF)); // High byte of count.
+        out.push_back((char)(cnt & 0xFF));        // Low byte of count.
         i = j;
     }
     return out;

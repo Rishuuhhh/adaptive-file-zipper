@@ -1,11 +1,11 @@
 const API = "";
 
-// number format helpers
+// Number-format helper functions.
 function fmtEnt(v)  { return `${Number(v).toFixed(4)} bits/char`; }
 function fmtRat(v)  { return `${(Number(v) * 100).toFixed(1)}%`; }
 function fmtTime(v) { return `${Number(v).toFixed(2)} ms`; }
 
-// error message dikhao
+// Show error message and hide unrelated sections.
 function showErr(msg) {
     const el = document.getElementById("error");
     el.innerText = msg;
@@ -14,7 +14,7 @@ function showErr(msg) {
     document.getElementById("stats").classList.add("hidden");
 }
 
-// status message dikhao
+// Show status message.
 function showStatus(msg) {
     const el = document.getElementById("status");
     el.innerText = msg;
@@ -22,7 +22,7 @@ function showStatus(msg) {
     document.getElementById("error").classList.add("hidden");
 }
 
-// messages chhupao
+// Hide status and error messages.
 function clearMsgs() {
     document.getElementById("error").classList.add("hidden");
     document.getElementById("status").classList.add("hidden");
@@ -32,7 +32,7 @@ function showResults() {
     document.getElementById("results").classList.remove("hidden");
 }
 
-// file select ya drag-drop
+// Handle file selection and drag-drop input.
 document.getElementById("fileInput").addEventListener("change", function () {
     setFile(this.files[0]);
 });
@@ -66,7 +66,7 @@ function setFile(f) {
     document.getElementById("selectedFile").classList.remove("hidden");
 }
 
-// compress button
+// Compress button handler.
 async function compressFile() {
     const fi = document.getElementById("fileInput");
     if (!fi.files.length) { alert("Please select a file first"); return; }
@@ -109,7 +109,7 @@ async function compressFile() {
     }
 }
 
-// decompress button
+// Decompress button handler.
 async function decompressFile() {
     const fi = document.getElementById("fileInput");
     if (!fi.files.length) { alert("Please select a file first"); return; }

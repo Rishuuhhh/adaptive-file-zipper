@@ -7,7 +7,7 @@
 #include <sstream>
 #include <string>
 
-// command run karo aur output + exit code wapas lo
+// Run command and return combined output with exit code.
 static std::pair<std::string, int> run(const std::string &cmd) {
     std::string out;
     std::array<char, 256> buf;
@@ -18,7 +18,7 @@ static std::pair<std::string, int> run(const std::string &cmd) {
     return {out, WEXITSTATUS(st)};
 }
 
-// temp file banao aur path return karo
+// Create a temp file and return its path.
 static std::string tmpFile(const std::string &content, const std::string &ext = ".txt") {
     std::string path = "/tmp/zipper_test" + ext;
     std::ofstream f(path);
@@ -26,7 +26,7 @@ static std::string tmpFile(const std::string &content, const std::string &ext = 
     return path;
 }
 
-// 4 se kam args pe exit code 1 aana chahiye
+// Fewer than 4 args should exit with code 1.
 TEST(CLI, TooFewArgsExits1) {
     auto [out, code] = run("./zipper compress 2>&1");
     EXPECT_EQ(code, 1);
@@ -37,14 +37,14 @@ TEST(CLI, NoArgsExits1) {
     EXPECT_EQ(code, 1);
 }
 
-// file na mile toh error aur exit code 1
+// Missing input file should return error and exit code 1.
 TEST(CLI, MissingFileExits1) {
     auto [out, code] = run("./zipper compress /tmp/nope_xyz.txt /tmp/out.z 2>&1");
     EXPECT_EQ(code, 1);
     EXPECT_NE(out.find("error"), std::string::npos);
 }
 
-// compress pe valid JSON aana chahiye
+// Compress should output valid JSON fields.
 TEST(CLI, CompressOutputsJSON) {
     std::string in  = tmpFile("hello world aaa bbb ccc repeated content");
     std::string out = "/tmp/zipper_test_out.z";
@@ -61,7 +61,7 @@ TEST(CLI, CompressOutputsJSON) {
     EXPECT_TRUE(f.good());
 }
 
-// decompress pe status done aana chahiye
+// Decompress should output status=done.
 TEST(CLI, DecompressOutputsDone) {
     std::string in   = tmpFile("hello world decompress test");
     std::string cmp  = "/tmp/zipper_test_decomp.z";

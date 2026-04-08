@@ -11,7 +11,7 @@
 #include <cmath>
 #include <algorithm>
 
-// repeat density nikalo — kitne adjacent pairs same hain
+// Compute repeat density: fraction of equal adjacent pairs.
 static double repDens(const std::string &s) {
     if (s.size() < 2) return 0.0;
     size_t rr = 0;
@@ -20,7 +20,7 @@ static double repDens(const std::string &s) {
     return (double)rr / s.size();
 }
 
-// zyada repeat wale data pe RLE choose hona chahiye
+// Highly repetitive data should choose RLE.
 RC_GTEST_PROP(Controller, RLEForHighRepeat, ()) {
     char c = *rc::gen::arbitrary<char>();
     int cnt = *rc::gen::inRange<int>(4, 200);
@@ -30,7 +30,7 @@ RC_GTEST_PROP(Controller, RLEForHighRepeat, ()) {
     RC_ASSERT(r.method == "RLE");
 }
 
-// kam repeat aur kam entropy pe BLOCK_HUFFMAN aana chahiye
+// Low-repeat, low-entropy data should choose BLOCK_HUFFMAN.
 RC_GTEST_PROP(Controller, BlockHuffmanForLowRepeatLowEntropy, ()) {
     int al = *rc::gen::inRange<int>(4, 9);
     int len = *rc::gen::inRange<int>(2, 100);
@@ -57,7 +57,7 @@ RC_GTEST_PROP(Controller, BlockHuffmanForLowRepeatLowEntropy, ()) {
     RC_ASSERT(r.method == "BLOCK_HUFFMAN");
 }
 
-// near-random data pe NONE aana chahiye
+// Near-random data should choose NONE.
 RC_GTEST_PROP(Controller, NoneForRandomData, ()) {
     int rep = *rc::gen::inRange<int>(1, 5);
     int len = 256 * rep;
@@ -77,7 +77,7 @@ RC_GTEST_PROP(Controller, NoneForRandomData, ()) {
     RC_ASSERT(r.adaptiveRatio == 1.0);
 }
 
-// huffmanRatio formula sahi hona chahiye
+// huffmanRatio formula should be correct.
 RC_GTEST_PROP(Controller, HuffmanRatioCorrect, ()) {
     auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
     auto r = runAdaptiveCompression(in);
@@ -86,7 +86,7 @@ RC_GTEST_PROP(Controller, HuffmanRatioCorrect, ()) {
     RC_ASSERT(std::abs(r.huffmanRatio - exp) < 1e-9);
 }
 
-// adaptiveRatio formula sahi hona chahiye
+// adaptiveRatio formula should be correct.
 RC_GTEST_PROP(Controller, AdaptiveRatioCorrect, ()) {
     auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
     auto r = runAdaptiveCompression(in);
@@ -100,7 +100,7 @@ RC_GTEST_PROP(Controller, AdaptiveRatioCorrect, ()) {
     RC_ASSERT(std::abs(r.adaptiveRatio - exp) < 1e-9);
 }
 
-// compress -> decompress wapas original dena chahiye
+// compress -> decompress should restore original input.
 RC_GTEST_PROP(Controller, RoundTrip, ()) {
     auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
     auto r = runAdaptiveCompression(in);

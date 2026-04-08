@@ -11,7 +11,7 @@
 using namespace std;
 using namespace chrono;
 
-// entropy se pata karo huffman kitna compress kar sakta hai
+// Estimate achievable Huffman compression ratio from entropy.
 static double estHuffRatio(const string &d) {
     if (d.empty()) return 1.0;
     int fr[256] = {};
@@ -27,14 +27,14 @@ static double estHuffRatio(const string &d) {
     return (h * n / 8.0) / n;
 }
 
-// ek method ka naam, uska output aur ratio store karta hai
+// Stores one candidate method with its output and ratio.
 struct Cand {
     string meth;
     string out;
     double rat;
 };
 
-// teen methods try karo, jo best ho woh use karo
+// Try three methods and select the best one.
 CompressionResult runAdaptiveCompression(const string &d) {
     auto t0 = high_resolution_clock::now();
 
@@ -45,7 +45,7 @@ CompressionResult runAdaptiveCompression(const string &d) {
     double orig = (double)d.size();
     double hr = estHuffRatio(d);
 
-    // random data hai, compress karna bekaar hai
+    // Near-random data usually does not benefit from compression.
     if (ent >= 7.8) {
         auto t1 = high_resolution_clock::now();
         double ms = duration<double, milli>(t1 - t0).count();
@@ -53,19 +53,19 @@ CompressionResult runAdaptiveCompression(const string &d) {
         return {"NONE", ent, 1.0, hr, ms, pk};
     }
 
-    // RLE try karo
+    // Try RLE.
     string ro = rleCompress(d);
     double rr = (double)ro.size() / orig;
 
-    // global huffman try karo
+    // Try global Huffman.
     string go = globalHuffmanCompress(d);
     double gr = (double)go.size() / orig;
 
-    // block huffman try karo
+    // Try block-split Huffman.
     string bo = blockSplitCompress(d);
     double br = (double)bo.size() / orig;
 
-    // teeno mein se sabse chhota choose karo
+    // Select the smallest output among all candidates.
     vector<Cand> cv = {
         {"RLE",         ro, rr},
         {"GLOBAL_HUFF", go, gr},
@@ -87,7 +87,7 @@ CompressionResult runAdaptiveCompression(const string &d) {
     return {meth, ent, ar, hr, ms, pk};
 }
 
-// method tag dekh ke sahi decompress karo
+// Dispatch decompression based on stored method tag.
 string runDecompression(const string &pk) {
     string meth, cms, pay;
     double ent;
@@ -102,7 +102,7 @@ string runDecompression(const string &pk) {
     if (meth == "NONE")
         return pay;
 
-    // purane files ke liye
+    // Backward compatibility for legacy method tags.
     if (meth == "BLOCK_HUFFMAN" || meth == "RLE_HUFFMAN") {
         auto cm = deserializeCodeMap(cms);
         if (meth == "RLE_HUFFMAN") {
