@@ -4,6 +4,7 @@
   "description": "",
   "main": "server.js",
   "scripts": {
+    "build": "cd .. && g++ -std=c++17 -O2 -o zipper src/main.cpp src/controller.cpp src/file_io.cpp src/entropy.cpp src/rle.cpp src/block_huffman.cpp src/huffman.cpp -I include",
     "test": "jest",
     "start": "node server.js"
   },
