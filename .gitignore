@@ -49,3 +49,6 @@ data/[0-9]*_*.txt
 data/[0-9]*_*.z
 results/compressed_*.z
 results/decompressed_*.txt
+results/input*.txt
+results/input*.z
+tests/test_runner

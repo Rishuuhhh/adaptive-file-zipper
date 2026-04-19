@@ -3,6 +3,7 @@
 
 #include <filesystem>
 #include <iostream>
+#include <stdexcept>
 
 using namespace std;
 
@@ -28,7 +29,9 @@ int main(int argc, char *argv[]) {
         }
 
         string d = readFile(fin);
+        size_t originalSize = d.size();
         CompressionResult r = runAdaptiveCompression(d);
+        size_t compressedSize = r.compressedData.size();
         writeFile(fout, r.compressedData);
 
         // Node.js backend parses this JSON output.
@@ -37,7 +40,9 @@ int main(int argc, char *argv[]) {
         cout << "\"adaptiveMethod\": \"" << r.method      << "\",\n";
         cout << "\"adaptiveRatio\": "  << r.adaptiveRatio << ",\n";
         cout << "\"huffmanRatio\": "   << r.huffmanRatio  << ",\n";
-        cout << "\"time\": "           << r.timeTaken     << "\n";
+        cout << "\"time\": "           << r.timeTaken     << ",\n";
+        cout << "\"originalSize\": "   << originalSize    << ",\n";
+        cout << "\"compressedSize\": " << compressedSize  << "\n";
         cout << "}\n";
 
     } else if (mode == "decompress") {
@@ -47,8 +52,14 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        string pk  = readFile(fin);
-        string org = runDecompression(pk);
+        string pk = readFile(fin);
+        string org;
+        try {
+            org = runDecompression(pk);
+        } catch (const std::exception &e) {
+            cout << "{\"error\": \"" << e.what() << "\"}\n";
+            return 1;
+        }
         writeFile(fout, org);
 
         cout << "{ \"status\": \"done\" }\n";

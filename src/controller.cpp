@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <stdexcept>
 #include <vector>
 
 using namespace std;
@@ -38,8 +39,10 @@ struct Cand {
 CompressionResult runAdaptiveCompression(const string &d) {
     auto t0 = high_resolution_clock::now();
 
-    if (d.empty())
-        return {"NONE", 0.0, 1.0, 1.0, 0.0, ""};
+    if (d.empty()) {
+        string pk = serializeCompressedData("NONE", 0.0, "", "");
+        return {"NONE", 0.0, 1.0, 1.0, 0.0, pk};
+    }
 
     double ent = calculateEntropy(d);
     double orig = (double)d.size();
@@ -112,5 +115,5 @@ string runDecompression(const string &pk) {
         return blockHuffmanDecompress(pay, cm);
     }
 
-    return "";
+    throw std::runtime_error("Unknown method: " + meth);
 }

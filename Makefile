@@ -1,7 +1,9 @@
 CXX      := g++
 CXXFLAGS := -std=c++17 -Wall -Wextra
-INCLUDES := -I include -I /usr/local/include
-LDFLAGS  := -L /usr/local/lib -lgtest -lgtest_main -lrapidcheck -pthread
+# Support both /usr/local (Linux / manual install) and /opt/homebrew (Apple Silicon)
+BREW_PREFIX := $(shell brew --prefix 2>/dev/null || echo /usr/local)
+INCLUDES := -I include -I $(BREW_PREFIX)/include
+LDFLAGS  := -L $(BREW_PREFIX)/lib -lgtest -lgtest_main -lrapidcheck -pthread
 
 SRC_FILES := src/controller.cpp src/file_io.cpp src/entropy.cpp \
              src/rle.cpp src/block_huffman.cpp src/huffman.cpp

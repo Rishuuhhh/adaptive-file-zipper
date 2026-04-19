@@ -1,6 +1,7 @@
 #include "file_io.h"
 #include <fstream>
 #include <sstream>
+#include <stdexcept>
 
 using namespace std;
 
@@ -74,21 +75,56 @@ void deserializeCompressedData(const string &input, string &method,
                               double &entropy, string &serializedCodeMap,
                               string &payload) {
     int position = 0;
+    int inputSize = (int)input.size();
 
+    // Parse method tag
     int newlinePos = (int)input.find('\n', position);
-    if (newlinePos == (int)string::npos) return;
+    if (newlinePos == (int)string::npos)
+        throw std::runtime_error("Malformed Serialized_Blob: missing method tag newline");
     method = input.substr(position, newlinePos - position);
     position = newlinePos + 1;
 
+    // Parse entropy
     newlinePos = (int)input.find('\n', position);
-    if (newlinePos == (int)string::npos) return;
-    entropy = stod(input.substr(position, newlinePos - position));
+    if (newlinePos == (int)string::npos)
+        throw std::runtime_error("Malformed Serialized_Blob: missing entropy newline");
+    {
+        string entropyStr = input.substr(position, newlinePos - position);
+        if (entropyStr.empty())
+            throw std::runtime_error("Malformed Serialized_Blob: entropy field is empty");
+        try {
+            entropy = stod(entropyStr);
+        } catch (const std::exception &) {
+            throw std::runtime_error("Malformed Serialized_Blob: entropy field is not a valid number: \"" + entropyStr + "\"");
+        }
+    }
     position = newlinePos + 1;
 
+    // Parse codeMapLength
     newlinePos = (int)input.find('\n', position);
-    if (newlinePos == (int)string::npos) return;
-    int codeMapLength = stoi(input.substr(position, newlinePos - position));
+    if (newlinePos == (int)string::npos)
+        throw std::runtime_error("Malformed Serialized_Blob: missing codeMapLength newline");
+    int codeMapLength = 0;
+    {
+        string codeMapLenStr = input.substr(position, newlinePos - position);
+        if (codeMapLenStr.empty())
+            throw std::runtime_error("Malformed Serialized_Blob: codeMapLength field is empty");
+        try {
+            codeMapLength = stoi(codeMapLenStr);
+        } catch (const std::exception &) {
+            throw std::runtime_error("Malformed Serialized_Blob: codeMapLength field is not a valid integer: \"" + codeMapLenStr + "\"");
+        }
+        if (codeMapLength < 0)
+            throw std::runtime_error("Malformed Serialized_Blob: codeMapLength is negative");
+    }
     position = newlinePos + 1;
+
+    // Verify the code map region is within bounds before slicing
+    if (position + codeMapLength > inputSize)
+        throw std::runtime_error("Malformed Serialized_Blob: codeMapLength (" +
+                                 to_string(codeMapLength) +
+                                 ") extends beyond end of input (available: " +
+                                 to_string(inputSize - position) + " bytes)");
 
     serializedCodeMap = input.substr(position, codeMapLength);
     position += codeMapLength;

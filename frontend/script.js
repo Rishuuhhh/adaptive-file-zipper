@@ -5,6 +5,25 @@ function fmtEnt(v)  { return `${Number(v).toFixed(4)} bits/char`; }
 function fmtRat(v)  { return `${(Number(v) * 100).toFixed(1)}%`; }
 function fmtTime(v) { return `${Number(v).toFixed(2)} ms`; }
 
+// Aliases for test compatibility.
+function formatEntropy(v) { return fmtEnt(v); }
+function formatRatio(v)   { return fmtRat(v); }
+function formatTime(v)    { return fmtTime(v); }
+
+// Format a byte count as "512 B", "12.3 KB", or "3.45 MB".
+function formatSize(bytes) {
+    if (bytes < 1024)        return `${bytes} B`;
+    if (bytes < 1048576)     return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1048576).toFixed(2)} MB`;
+}
+
+// Format size reduction as a percentage with one decimal place.
+// Returns "0.0%" when originalSize === 0 to avoid division by zero.
+function formatReduction(originalSize, compressedSize) {
+    if (originalSize === 0) return "0.0%";
+    return `${((1 - compressedSize / originalSize) * 100).toFixed(1)}%`;
+}
+
 // Show error message and hide unrelated sections.
 function showErr(msg) {
     const el = document.getElementById("error");
@@ -75,30 +94,67 @@ async function compressFile() {
     btn.disabled = true;
     btn.innerHTML = '<span class="btn-icon">⏳</span> Compressing...';
 
+    const originalFilename = fi.files[0].name;
     const fd = new FormData();
     fd.append("file", fi.files[0]);
 
     try {
-        const res  = await fetch('/compress', { method: "POST", body: fd });
-        const data = await res.json();
+        const res = await fetch('/compress', { method: "POST", body: fd });
 
         showResults();
 
-        if (!res.ok) { showErr(data.error || "Compression failed"); return; }
+        if (!res.ok) {
+            let errMsg = "Compression failed";
+            try { errMsg = (await res.json()).error || errMsg; } catch (_) {}
+            showErr(errMsg);
+            return;
+        }
+
+        // Parse stats from response header; fall back to {} on parse failure.
+        let stats = {};
+        try {
+            const statsHeader = res.headers.get('X-Compression-Stats');
+            if (statsHeader) stats = JSON.parse(statsHeader);
+        } catch (_) {}
+
+        // Read the binary body as a Blob.
+        const blob = await res.blob();
+
+        // Trigger programmatic download using a temporary object URL.
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = originalFilename + '.z';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
 
         clearMsgs();
 
-        document.getElementById("entropy").innerText  = fmtEnt(data.entropy);
-        document.getElementById("method").innerText   = data.adaptiveMethod;
-        document.getElementById("adaptive").innerText = fmtRat(data.adaptiveRatio);
-        document.getElementById("huffman").innerText  = fmtRat(data.huffmanRatio);
-        document.getElementById("time").innerText     = fmtTime(data.time);
+        // Populate Stats_Panel from the header stats.
+        document.getElementById("entropy").innerText  = fmtEnt(stats.entropy);
+        document.getElementById("method").innerText   = stats.adaptiveMethod || "—";
+        document.getElementById("adaptive").innerText = fmtRat(stats.adaptiveRatio);
+        document.getElementById("huffman").innerText  = fmtRat(stats.huffmanRatio);
+        document.getElementById("time").innerText     = fmtTime(stats.time);
+
+        // Populate Size_Card.
+        const origSize = stats.originalSize;
+        const compSize = stats.compressedSize;
+        document.getElementById("originalSizeDisplay").innerText =
+            (origSize !== undefined) ? formatSize(origSize) : "—";
+        document.getElementById("compressedSizeDisplay").innerText =
+            (compSize !== undefined) ? formatSize(compSize) : "—";
+        document.getElementById("sizeReduction").innerText =
+            (origSize !== undefined && compSize !== undefined)
+                ? formatReduction(origSize, compSize)
+                : "—";
 
         document.getElementById("stats").classList.remove("hidden");
 
-        const lnk = document.getElementById("downloadLink");
-        lnk.href = data.download;
-        lnk.classList.remove("hidden");
+        // Hide the legacy downloadLink element (download is now blob-driven).
+        document.getElementById("downloadLink").classList.add("hidden");
 
     } catch (e) {
         showResults();
@@ -134,14 +190,14 @@ async function decompressFile() {
         }
 
         const blob = await res.blob();
-        const url  = window.URL.createObjectURL(blob);
+        const url  = URL.createObjectURL(blob);
         const a    = document.createElement("a");
         a.href     = url;
         a.download = "output.txt";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+        URL.revokeObjectURL(url);
 
         clearMsgs();
         document.getElementById("stats").classList.add("hidden");

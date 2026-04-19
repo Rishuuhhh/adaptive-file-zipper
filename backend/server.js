@@ -54,8 +54,12 @@ app.post("/compress", upload.single("file"), (req, res) => {
     }
 
     const inp = req.file.path;
+    const originalFilename = req.file.originalname;
     const out = path.join(resultDir, "compressed_" + req.file.filename + ".z");
     execFile(zipperPath, ["compress", inp, out], (err, stdout, stderr) => {
+        // Always clean up the uploaded input file.
+        fs.unlink(inp, () => {});
+
         if (err) {
             const detail = (stderr || err.message || "Unknown execution error").trim();
             console.error("Compression failed", {
@@ -65,6 +69,7 @@ app.post("/compress", upload.single("file"), (req, res) => {
             });
             return res.status(500).json({ error: "Compression failed", detail });
         }
+
         let json;
         try {
             json = JSON.parse(stdout);
@@ -72,7 +77,35 @@ app.post("/compress", upload.single("file"), (req, res) => {
             console.error("Invalid compressor JSON", { stdout, stderr });
             return res.status(500).json({ error: "Invalid JSON from C++" });
         }
-        res.json({ ...json, download: `/download?path=${encodeURIComponent(out)}` });
+
+        let buf;
+        try {
+            buf = fs.readFileSync(out);
+        } catch (e) {
+            console.error("Could not read compressed file", { path: out, error: e.message });
+            return res.status(500).json({
+                error: "Could not read compressed file",
+                detail: e.message
+            });
+        }
+
+        const stats = {
+            entropy:        json.entropy,
+            adaptiveMethod: json.adaptiveMethod,
+            adaptiveRatio:  json.adaptiveRatio,
+            huffmanRatio:   json.huffmanRatio,
+            time:           json.time,
+            originalSize:   json.originalSize,
+            compressedSize: json.compressedSize
+        };
+
+        res.set("Content-Type", "application/octet-stream");
+        res.set("Content-Disposition", `attachment; filename="${originalFilename}.z"`);
+        res.set("X-Compression-Stats", JSON.stringify(stats));
+        res.send(buf);
+
+        // Clean up the compressed output file after sending.
+        fs.unlink(out, () => {});
     });
 });
 
@@ -88,6 +121,9 @@ app.post("/decompress", upload.single("file"), (req, res) => {
     const inp = req.file.path;
     const out = path.join(resultDir, "decompressed_" + req.file.filename + ".txt");
     execFile(zipperPath, ["decompress", inp, out], (err, _stdout, stderr) => {
+        // Always clean up the uploaded input file.
+        fs.unlink(inp, () => {});
+
         if (err) {
             const detail = (stderr || err.message || "Unknown execution error").trim();
             console.error("Decompression failed", {
