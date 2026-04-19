@@ -1,4 +1,5 @@
 #include "file_io.h"
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -63,17 +64,32 @@ unordered_map<string, string> deserializeCodeMap(const string &serialized) {
 
 string serializeCompressedData(const string &method, double entropy,
                               const string &serializedCodeMap,
-                              const string &payload) {
+                              const string &payload,
+                              const string &originalFilename) {
+    // Sanitize originalFilename: strip any path components and leading slashes
+    // to prevent path traversal when the filename is later used for output.
+    string safeName = originalFilename;
+    // Remove any directory separators
+    auto lastSlash = safeName.find_last_of("/\\");
+    if (lastSlash != string::npos)
+        safeName = safeName.substr(lastSlash + 1);
+    // Strip leading dots that could form relative paths like "../foo"
+    while (!safeName.empty() && safeName[0] == '.')
+        safeName = safeName.substr(1);
+    // Remove any embedded newlines (they would break the header format)
+    safeName.erase(std::remove(safeName.begin(), safeName.end(), '\n'), safeName.end());
+
     return method + "\n"
          + to_string(entropy) + "\n"
          + to_string((int)serializedCodeMap.size()) + "\n"
+         + safeName + "\n"
          + serializedCodeMap
          + payload;
 }
 
 void deserializeCompressedData(const string &input, string &method,
                               double &entropy, string &serializedCodeMap,
-                              string &payload) {
+                              string &payload, string &originalFilename) {
     int position = 0;
     int inputSize = (int)input.size();
 
@@ -118,6 +134,23 @@ void deserializeCompressedData(const string &input, string &method,
             throw std::runtime_error("Malformed Serialized_Blob: codeMapLength is negative");
     }
     position = newlinePos + 1;
+
+    // Try to read the 4th header line as originalFilename (new format).
+    // If consuming it still leaves enough bytes for the codeMap, use it.
+    // Otherwise treat originalFilename as "" and stay at current position (old format).
+    originalFilename = "";
+    int posAfterFilename = position;
+    int filenameNewline = (int)input.find('\n', position);
+    if (filenameNewline != (int)string::npos) {
+        int posCandidate = filenameNewline + 1;
+        // Check that the codeMap would fit after this candidate position
+        if (posCandidate + codeMapLength <= inputSize) {
+            originalFilename = input.substr(position, filenameNewline - position);
+            posAfterFilename = posCandidate;
+        }
+        // else: old 3-line format — leave originalFilename="" and posAfterFilename=position
+    }
+    position = posAfterFilename;
 
     // Verify the code map region is within bounds before slicing
     if (position + codeMapLength > inputSize)

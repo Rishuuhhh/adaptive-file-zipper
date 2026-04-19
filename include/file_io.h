@@ -18,29 +18,41 @@ std::string serializeCodeMap(const std::unordered_map<std::string, std::string> 
 std::unordered_map<std::string, std::string> deserializeCodeMap(const std::string &serialized);
 
 /* Pack a compressed payload together with its metadata (method tag, entropy value,
-   and optional serialized code map) into a single binary blob suitable for writing
-   to a .z file. */
+   optional serialized code map, and optional original filename) into a single binary
+   blob suitable for writing to a .z file. */
 std::string serializeCompressedData(const std::string &method, double entropy,
                                     const std::string &serializedCodeMap,
-                                    const std::string &payload);
+                                    const std::string &payload,
+                                    const std::string &originalFilename = "");
 
 /* Unpack a binary blob produced by serializeCompressedData, recovering the method
-   tag, entropy value, serialized code map, and compressed payload. */
+   tag, entropy value, serialized code map, compressed payload, and original filename.
+   Backward compatible: old blobs without the originalFilename line return "". */
 void deserializeCompressedData(const std::string &input, std::string &method,
                                double &entropy, std::string &serializedCodeMap,
-                               std::string &payload);
+                               std::string &payload,
+                               std::string &originalFilename);
+
+/* Overload without originalFilename for backward compatibility. */
+inline void deserializeCompressedData(const std::string &input, std::string &method,
+                                      double &entropy, std::string &serializedCodeMap,
+                                      std::string &payload) {
+    std::string ignored;
+    deserializeCompressedData(input, method, entropy, serializedCodeMap, payload, ignored);
+}
 
 /* Backward-compatible aliases retained so existing test binaries continue to link. */
 inline std::string packData(const std::string &method, double entropy,
                             const std::string &serializedCodeMap,
                             const std::string &payload) {
-    return serializeCompressedData(method, entropy, serializedCodeMap, payload);
+    return serializeCompressedData(method, entropy, serializedCodeMap, payload, "");
 }
 
 inline void unpackData(const std::string &input, std::string &method,
                        double &entropy, std::string &serializedCodeMap,
                        std::string &payload) {
-    deserializeCompressedData(input, method, entropy, serializedCodeMap, payload);
+    std::string ignored;
+    deserializeCompressedData(input, method, entropy, serializedCodeMap, payload, ignored);
 }
 
 #endif

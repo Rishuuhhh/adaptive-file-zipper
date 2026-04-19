@@ -42,7 +42,13 @@ const storage = multer.diskStorage({
     filename:    (req, file, cb) => cb(null, Date.now() + "_" + file.originalname)
 });
 
-const upload = multer({ storage });
+// 50 MB upload limit.
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+const upload = multer({
+    storage,
+    limits: { fileSize: MAX_FILE_SIZE }
+});
 
 // Compress endpoint.
 app.post("/compress", upload.single("file"), (req, res) => {
@@ -119,7 +125,7 @@ app.post("/decompress", upload.single("file"), (req, res) => {
     }
 
     const inp = req.file.path;
-    const out = path.join(resultDir, "decompressed_" + req.file.filename + ".txt");
+    const out = path.join(resultDir, "decompressed_" + req.file.filename);
     execFile(zipperPath, ["decompress", inp, out], (err, stdout, stderr) => {
         // Always clean up the uploaded input file.
         fs.unlink(inp, () => {});
@@ -141,7 +147,20 @@ app.post("/decompress", upload.single("file"), (req, res) => {
             return res.status(500).json({ error: "Decompressed file not found" });
         }
 
-        res.download(out, (downloadErr) => {
+        // Determine the original filename for the download.
+        // The C++ binary emits { "status": "done", "originalFilename": "..." } on stdout.
+        let downloadName = "decompressed_output";
+        try {
+            const parsed = JSON.parse(stdout);
+            if (parsed.originalFilename) downloadName = parsed.originalFilename;
+        } catch (_) {}
+        // Fallback: strip .z extension from the uploaded filename.
+        if (downloadName === "decompressed_output") {
+            const base = req.file.originalname;
+            downloadName = base.endsWith(".z") ? base.slice(0, -2) : base;
+        }
+
+        res.download(out, downloadName, (downloadErr) => {
             // Clean up the output file after sending (or on error).
             fs.unlink(out, () => {});
             if (downloadErr && !res.headersSent) {

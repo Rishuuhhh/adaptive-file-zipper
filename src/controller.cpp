@@ -36,12 +36,12 @@ struct Cand {
 };
 
 // Try three methods and select the best one.
-CompressionResult runAdaptiveCompression(const string &d) {
+CompressionResult runAdaptiveCompression(const string &d, const string &originalFilename) {
     auto t0 = high_resolution_clock::now();
 
     if (d.empty()) {
-        string pk = serializeCompressedData("NONE", 0.0, "", "");
-        return {"NONE", 0.0, 1.0, 1.0, 0.0, pk};
+        string pk = serializeCompressedData("NONE", 0.0, "", "", originalFilename);
+        return {"NONE", 0.0, 1.0, 1.0, 0.0, pk, originalFilename};
     }
 
     double ent = calculateEntropy(d);
@@ -52,8 +52,8 @@ CompressionResult runAdaptiveCompression(const string &d) {
     if (ent >= 7.8) {
         auto t1 = high_resolution_clock::now();
         double ms = duration<double, milli>(t1 - t0).count();
-        string pk = serializeCompressedData("NONE", ent, "", d);
-        return {"NONE", ent, 1.0, hr, ms, pk};
+        string pk = serializeCompressedData("NONE", ent, "", d, originalFilename);
+        return {"NONE", ent, 1.0, hr, ms, pk, originalFilename};
     }
 
     // Try RLE.
@@ -89,39 +89,40 @@ CompressionResult runAdaptiveCompression(const string &d) {
     // Build the candidate blob and check if it is actually smaller than the
     // original. If the header + payload overhead makes the blob larger, fall
     // back to NONE (store as-is) so the .z file is never bigger than the input.
-    string pk = serializeCompressedData(meth, ent, "", pay);
+    string pk = serializeCompressedData(meth, ent, "", pay, originalFilename);
     if (pk.size() >= d.size()) {
-        string nonePk = serializeCompressedData("NONE", ent, "", d);
-        return {"NONE", ent, 1.0, hr, ms, nonePk};
+        string nonePk = serializeCompressedData("NONE", ent, "", d, originalFilename);
+        return {"NONE", ent, 1.0, hr, ms, nonePk, originalFilename};
     }
 
-    return {meth, ent, ar, hr, ms, pk};
+    return {meth, ent, ar, hr, ms, pk, originalFilename};
 }
 
 // Dispatch decompression based on stored method tag.
-string runDecompression(const string &pk) {
-    string meth, cms, pay;
+DecompressionResult runDecompression(const string &pk) {
+    string meth, cms, pay, origFilename;
     double ent;
-    deserializeCompressedData(pk, meth, ent, cms, pay);
+    deserializeCompressedData(pk, meth, ent, cms, pay, origFilename);
 
+    string data;
     if (meth == "RLE")
-        return rleDecompress(pay);
-
-    if (meth == "GLOBAL_HUFF" || meth == "BLOCK_HUFF")
-        return blockHuffmanDecompress(pay, {});
-
-    if (meth == "NONE")
-        return pay;
-
+        data = rleDecompress(pay);
+    else if (meth == "GLOBAL_HUFF" || meth == "BLOCK_HUFF")
+        data = blockHuffmanDecompress(pay, {});
+    else if (meth == "NONE")
+        data = pay;
     // Backward compatibility for legacy method tags.
-    if (meth == "BLOCK_HUFFMAN" || meth == "RLE_HUFFMAN") {
+    else if (meth == "BLOCK_HUFFMAN" || meth == "RLE_HUFFMAN") {
         auto cm = deserializeCodeMap(cms);
         if (meth == "RLE_HUFFMAN") {
             string rd = blockHuffmanDecompress(pay, cm);
-            return rleDecompress(rd);
+            data = rleDecompress(rd);
+        } else {
+            data = blockHuffmanDecompress(pay, cm);
         }
-        return blockHuffmanDecompress(pay, cm);
+    } else {
+        throw std::runtime_error("Unknown method: " + meth);
     }
 
-    throw std::runtime_error("Unknown method: " + meth);
+    return {data, origFilename};
 }

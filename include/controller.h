@@ -10,10 +10,17 @@ struct CompressionResult {
     double huffmanRatio;
     double timeTaken;
     std::string compressedData;
+    std::string originalFilename;
 };
 
-CompressionResult runAdaptiveCompression(const std::string &data);
+struct DecompressionResult {
+    std::string data;
+    std::string originalFilename;
+};
 
-std::string runDecompression(const std::string &packedData);
+CompressionResult runAdaptiveCompression(const std::string &data,
+                                         const std::string &originalFilename = "");
+
+DecompressionResult runDecompression(const std::string &packedData);
 
 #endif

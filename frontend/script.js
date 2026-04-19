@@ -196,7 +196,23 @@ async function decompressFile() {
         const url  = URL.createObjectURL(blob);
         const a    = document.createElement("a");
         a.href     = url;
-        a.download = "output.txt";
+
+        // Use Content-Disposition filename from server (original file extension preserved).
+        const disposition = res.headers && res.headers.get
+            ? res.headers.get('Content-Disposition')
+            : null;
+        let downloadName = "decompressed_output";
+        if (disposition) {
+            const match = disposition.match(/filename="?([^"]+)"?/);
+            if (match) downloadName = match[1];
+        }
+        // Fallback: strip .z from uploaded filename.
+        if (downloadName === "decompressed_output") {
+            const name = fi.files[0].name;
+            downloadName = name.endsWith(".z") ? name.slice(0, -2) : name;
+        }
+        a.download = downloadName;
+
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

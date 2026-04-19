@@ -28,21 +28,25 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
+        // Extract just the basename (no path) to store in the .z header.
+        string originalFilename = filesystem::path(fin).filename().string();
+
         string d = readFile(fin);
         size_t originalSize = d.size();
-        CompressionResult r = runAdaptiveCompression(d);
+        CompressionResult r = runAdaptiveCompression(d, originalFilename);
         size_t compressedSize = r.compressedData.size();
         writeFile(fout, r.compressedData);
 
         // Node.js backend parses this JSON output.
         cout << "{\n";
-        cout << "\"entropy\": "        << r.entropy       << ",\n";
-        cout << "\"adaptiveMethod\": \"" << r.method      << "\",\n";
-        cout << "\"adaptiveRatio\": "  << r.adaptiveRatio << ",\n";
-        cout << "\"huffmanRatio\": "   << r.huffmanRatio  << ",\n";
-        cout << "\"time\": "           << r.timeTaken     << ",\n";
-        cout << "\"originalSize\": "   << originalSize    << ",\n";
-        cout << "\"compressedSize\": " << compressedSize  << "\n";
+        cout << "\"entropy\": "           << r.entropy          << ",\n";
+        cout << "\"adaptiveMethod\": \""  << r.method           << "\",\n";
+        cout << "\"adaptiveRatio\": "     << r.adaptiveRatio    << ",\n";
+        cout << "\"huffmanRatio\": "      << r.huffmanRatio     << ",\n";
+        cout << "\"time\": "              << r.timeTaken        << ",\n";
+        cout << "\"originalSize\": "      << originalSize       << ",\n";
+        cout << "\"compressedSize\": "    << compressedSize     << ",\n";
+        cout << "\"originalFilename\": \"" << r.originalFilename << "\"\n";
         cout << "}\n";
 
     } else if (mode == "decompress") {
@@ -53,16 +57,17 @@ int main(int argc, char *argv[]) {
         }
 
         string pk = readFile(fin);
-        string org;
+        DecompressionResult result;
         try {
-            org = runDecompression(pk);
+            result = runDecompression(pk);
         } catch (const std::exception &e) {
             cout << "{\"error\": \"" << e.what() << "\"}\n";
             return 1;
         }
-        writeFile(fout, org);
+        writeFile(fout, result.data);
 
-        cout << "{ \"status\": \"done\" }\n";
+        cout << "{ \"status\": \"done\", \"originalFilename\": \""
+             << result.originalFilename << "\" }\n";
     }
 
     return 0;
