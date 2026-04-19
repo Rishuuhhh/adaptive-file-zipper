@@ -95,8 +95,8 @@ app.post("/compress", upload.single("file"), (req, res) => {
             adaptiveRatio:  json.adaptiveRatio,
             huffmanRatio:   json.huffmanRatio,
             time:           json.time,
-            originalSize:   json.originalSize,
-            compressedSize: json.compressedSize
+            originalSize:   req.file.size,  // actual uploaded file size from multer
+            compressedSize: buf.length      // actual compressed file size on disk
         };
 
         res.set("Content-Type", "application/octet-stream");

@@ -86,7 +86,15 @@ CompressionResult runAdaptiveCompression(const string &d) {
     auto t1 = high_resolution_clock::now();
     double ms = duration<double, milli>(t1 - t0).count();
 
+    // Build the candidate blob and check if it is actually smaller than the
+    // original. If the header + payload overhead makes the blob larger, fall
+    // back to NONE (store as-is) so the .z file is never bigger than the input.
     string pk = serializeCompressedData(meth, ent, "", pay);
+    if (pk.size() >= d.size()) {
+        string nonePk = serializeCompressedData("NONE", ent, "", d);
+        return {"NONE", ent, 1.0, hr, ms, nonePk};
+    }
+
     return {meth, ent, ar, hr, ms, pk};
 }
 
