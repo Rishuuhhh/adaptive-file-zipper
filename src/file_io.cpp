@@ -4,93 +4,93 @@
 
 using namespace std;
 
-// Read a file in binary mode.
-string readFile(const string &fn) {
-    ifstream f(fn, ios::binary);
-    stringstream buf;
-    buf << f.rdbuf();
-    return buf.str();
+string readFile(const string &filename) {
+    ifstream file(filename, ios::binary);
+    stringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
 }
 
-// Write a file in binary mode.
-void writeFile(const string &fn, const string &d) {
-    ofstream f(fn, ios::binary);
-    f << d;
+void writeFile(const string &filename, const string &data) {
+    ofstream file(filename, ios::binary);
+    file << data;
 }
 
-// Serialize codeMap to a text representation.
-string serializeCodeMap(const unordered_map<string, string> &cm) {
-    string res;
-    for (auto &e : cm) {
-        int kl = (int)e.first.size();
-        int vl = (int)e.second.size();
-        res += to_string(kl) + ":" + e.first + " "
-             + to_string(vl) + ":" + e.second + "\n";
+string serializeCodeMap(const unordered_map<string, string> &codeMap) {
+    string result;
+    for (const auto &entry : codeMap) {
+        int keyLength = (int)entry.first.size();
+        int valueLength = (int)entry.second.size();
+        result += to_string(keyLength) + ":" + entry.first + " "
+                + to_string(valueLength) + ":" + entry.second + "\n";
     }
-    return res;
+    return result;
 }
 
-// Rebuild codeMap from serialized text.
-unordered_map<string, string> deserializeCodeMap(const string &s) {
-    unordered_map<string, string> cm;
-    int pos = 0, n = (int)s.size();
+unordered_map<string, string> deserializeCodeMap(const string &serialized) {
+    unordered_map<string, string> codeMap;
+    int position = 0;
+    int n = (int)serialized.size();
 
-    while (pos < n) {
-        int cl = (int)s.find(':', pos);
-        if (cl == (int)string::npos) break;
-        int kl = stoi(s.substr(pos, cl - pos));
-        pos = cl + 1;
-        string k = s.substr(pos, kl);
-        pos += kl;
+    while (position < n) {
+        int colonPos = (int)serialized.find(':', position);
+        if (colonPos == (int)string::npos) break;
+        int keyLength = stoi(serialized.substr(position, colonPos - position));
+        position = colonPos + 1;
 
-        if (pos >= n || s[pos] != ' ') break;
-        pos++;
+        string key = serialized.substr(position, keyLength);
+        position += keyLength;
 
-        cl = (int)s.find(':', pos);
-        if (cl == (int)string::npos) break;
-        int vl = stoi(s.substr(pos, cl - pos));
-        pos = cl + 1;
-        string v = s.substr(pos, vl);
-        pos += vl;
+        if (position >= n || serialized[position] != ' ') break;
+        position++;
 
-        if (pos < n && s[pos] == '\n') pos++;
-        cm[k] = v;
+        colonPos = (int)serialized.find(':', position);
+        if (colonPos == (int)string::npos) break;
+        int valueLength = stoi(serialized.substr(position, colonPos - position));
+        position = colonPos + 1;
+
+        string value = serialized.substr(position, valueLength);
+        position += valueLength;
+
+        if (position < n && serialized[position] == '\n') position++;
+
+        codeMap[key] = value;
     }
-    return cm;
+
+    return codeMap;
 }
 
-// Pack compressed payload with metadata header.
-string packData(const string &meth, double ent,
-                const string &cms, const string &pay) {
-    return meth + "\n"
-         + to_string(ent) + "\n"
-         + to_string((int)cms.size()) + "\n"
-         + cms
-         + pay;
+string serializeCompressedData(const string &method, double entropy,
+                              const string &serializedCodeMap,
+                              const string &payload) {
+    return method + "\n"
+         + to_string(entropy) + "\n"
+         + to_string((int)serializedCodeMap.size()) + "\n"
+         + serializedCodeMap
+         + payload;
 }
 
-// Unpack method, entropy, codemap, and payload from packed data.
-void unpackData(const string &in, string &meth, double &ent,
-                string &cms, string &pay) {
-    int pos = 0, n = (int)in.size();
+void deserializeCompressedData(const string &input, string &method,
+                              double &entropy, string &serializedCodeMap,
+                              string &payload) {
+    int position = 0;
 
-    int nl = (int)in.find('\n', pos);
-    if (nl == (int)string::npos) return;
-    meth = in.substr(pos, nl - pos);
-    pos = nl + 1;
+    int newlinePos = (int)input.find('\n', position);
+    if (newlinePos == (int)string::npos) return;
+    method = input.substr(position, newlinePos - position);
+    position = newlinePos + 1;
 
-    nl = (int)in.find('\n', pos);
-    if (nl == (int)string::npos) return;
-    ent = stod(in.substr(pos, nl - pos));
-    pos = nl + 1;
+    newlinePos = (int)input.find('\n', position);
+    if (newlinePos == (int)string::npos) return;
+    entropy = stod(input.substr(position, newlinePos - position));
+    position = newlinePos + 1;
 
-    nl = (int)in.find('\n', pos);
-    if (nl == (int)string::npos) return;
-    int cml = stoi(in.substr(pos, nl - pos));
-    pos = nl + 1;
+    newlinePos = (int)input.find('\n', position);
+    if (newlinePos == (int)string::npos) return;
+    int codeMapLength = stoi(input.substr(position, newlinePos - position));
+    position = newlinePos + 1;
 
-    cms = in.substr(pos, cml);
-    pos += cml;
-
-    pay = in.substr(pos);
+    serializedCodeMap = input.substr(position, codeMapLength);
+    position += codeMapLength;
+    payload = input.substr(position);
 }

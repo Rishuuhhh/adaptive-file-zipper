@@ -39,3 +39,13 @@
 
 # debug information files
 *.dwo
+
+# Local/editor metadata
+.DS_Store
+.kiro/
+
+# Generated runtime artifacts
+data/[0-9]*_*.txt
+data/[0-9]*_*.z
+results/compressed_*.z
+results/decompressed_*.txt

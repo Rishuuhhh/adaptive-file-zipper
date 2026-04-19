@@ -49,7 +49,7 @@ CompressionResult runAdaptiveCompression(const string &d) {
     if (ent >= 7.8) {
         auto t1 = high_resolution_clock::now();
         double ms = duration<double, milli>(t1 - t0).count();
-        string pk = packData("NONE", ent, "", d);
+        string pk = serializeCompressedData("NONE", ent, "", d);
         return {"NONE", ent, 1.0, hr, ms, pk};
     }
 
@@ -83,7 +83,7 @@ CompressionResult runAdaptiveCompression(const string &d) {
     auto t1 = high_resolution_clock::now();
     double ms = duration<double, milli>(t1 - t0).count();
 
-    string pk = packData(meth, ent, "", pay);
+    string pk = serializeCompressedData(meth, ent, "", pay);
     return {meth, ent, ar, hr, ms, pk};
 }
 
@@ -91,7 +91,7 @@ CompressionResult runAdaptiveCompression(const string &d) {
 string runDecompression(const string &pk) {
     string meth, cms, pay;
     double ent;
-    unpackData(pk, meth, ent, cms, pay);
+    deserializeCompressedData(pk, meth, ent, cms, pay);
 
     if (meth == "RLE")
         return rleDecompress(pay);
