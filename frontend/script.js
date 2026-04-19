@@ -184,7 +184,10 @@ async function decompressFile() {
 
         if (!res.ok) {
             let msg = "Decompression failed";
-            try { msg = (await res.json()).error || msg; } catch (_) {}
+            try {
+                const body = await res.json();
+                msg = body.detail || body.error || msg;
+            } catch (_) {}
             showErr(msg);
             return;
         }

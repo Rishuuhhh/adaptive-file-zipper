@@ -120,20 +120,34 @@ app.post("/decompress", upload.single("file"), (req, res) => {
 
     const inp = req.file.path;
     const out = path.join(resultDir, "decompressed_" + req.file.filename + ".txt");
-    execFile(zipperPath, ["decompress", inp, out], (err, _stdout, stderr) => {
+    execFile(zipperPath, ["decompress", inp, out], (err, stdout, stderr) => {
         // Always clean up the uploaded input file.
         fs.unlink(inp, () => {});
 
         if (err) {
-            const detail = (stderr || err.message || "Unknown execution error").trim();
-            console.error("Decompression failed", {
-                message: err.message,
-                code: err.code,
-                stderr
-            });
+            // The zipper prints its error message to stdout as JSON; fall back to stderr.
+            let detail = "";
+            try {
+                const parsed = JSON.parse(stdout);
+                detail = parsed.error || "";
+            } catch (_) {}
+            if (!detail) detail = (stderr || err.message || "Unknown execution error").trim();
+            console.error("Decompression failed", { message: err.message, code: err.code, detail });
             return res.status(500).json({ error: "Decompression failed", detail });
         }
-        res.download(out);
+
+        // Verify the output file exists before attempting to send it.
+        if (!fs.existsSync(out)) {
+            return res.status(500).json({ error: "Decompressed file not found" });
+        }
+
+        res.download(out, (downloadErr) => {
+            // Clean up the output file after sending (or on error).
+            fs.unlink(out, () => {});
+            if (downloadErr && !res.headersSent) {
+                res.status(500).json({ error: "Failed to send decompressed file" });
+            }
+        });
     });
 });
 
