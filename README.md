@@ -1,7 +1,6 @@
 # Adaptive File Zipper
 
-This project is used to compress the text files as well as binary files you can download it and decompress the file. It uses adaptive algorithm used.
-
+This project is used to compress the text files as well as binary files you can download it and decompress the file. It uses adaptive algorithm.
 It has three layers:
 
 1. C++ core for compression/decompression logic
