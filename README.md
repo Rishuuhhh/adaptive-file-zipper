@@ -1,83 +1,81 @@
 # Adaptive File Zipper
 
-C++ compression engine with a Node.js backend and browser frontend.
+This project is used to compress the text files as well as binary files you can download it and decompress the file. It uses adaptive algorithm used.
 
-The C++ part tries three methods on every file and keeps the smallest result:
+It has three layers:
 
-- RLE — good for files with lots of repeated bytes
-- Global Huffman — one huffman tree for the whole file
-- Block Huffman — separate huffman tree per 32KB chunk, good for mixed files
+1. C++ core for compression/decompression logic
+2. Node.js backend that calls the C++ binary
+3. Browser frontend for easy upload/download usage
 
-Files under 4KB skip block mode. Files with very high entropy (>= 7.8 bits/symbol) are stored as-is since compression won't help.
+## How Compression Is Chosen
 
----
+For each input file, the controller tries multiple methods and picks the best result:
+
+1. `RLE` for repeated bytes
+2. `GLOBAL_HUFF` with one Huffman model for the full file
+3. `BLOCK_HUFF` with per-block Huffman models
+
+If entropy is very high (near-random data), it stores data as `NONE` to avoid useless compression work.
 
 ## Requirements
 
-- macOS or Linux
-- g++ with C++17 (`xcode-select --install` on macOS)
-- Node.js 18+
+1. macOS or Linux
+2. g++ with C++17 support
+3. Node.js 18+
 
----
+On macOS you can install compiler tools with:
+
+```bash
+xcode-select --install
+```
 
 ## Setup
 
-### 1. Build
+### 1. Build the C++ binary
 
 ```bash
 make build
 ```
 
-or manually:
+### 2. Install backend dependencies
 
 ```bash
-g++ -std=c++17 -O2 -o zipper \
-  src/main.cpp src/controller.cpp src/file_io.cpp \
-  src/entropy.cpp src/rle.cpp src/huffman.cpp src/block_huffman.cpp \
-  -I include
+cd backend
+npm install
 ```
 
-### 2. Backend
+### 3. Run the backend
 
 ```bash
-cd backend && npm install
+cd backend
+npm start
 ```
 
-### 3. Run server
+Server starts on `http://localhost:3000`.
+
+### 4. Open the app
+
+Open `http://localhost:3000` in browser.
+
+Note:
+Do not open `frontend/index.html` directly with `file://` because API calls need the backend server.
+
+## CLI Usage
+
+### Compress
 
 ```bash
-cd backend && npm start
-```
-
-Opens at `http://localhost:3000`. Keep this terminal running.
-
-### 4. Open browser
-
-Go to `http://localhost:3000`.
-
-> Don't open `frontend/index.html` directly as a file:// URL, it won't work.
-
----
-
-## How to use
-
-1. Pick a file and click Compress
-2. You'll see entropy, which method was picked, compression ratio, and a download link for the `.z` file
-3. To decompress: pick a `.z` file and click Decompress
-
----
-
-## CLI
-
-```bash
-# compress
 ./zipper compress input.txt output.z
+```
 
-# decompress
+### Decompress
+
+```bash
 ./zipper decompress output.z recovered.txt
 ```
 
-Compress prints JSON:
+The compress command prints JSON stats like:
 
 ```json
 {
@@ -89,101 +87,73 @@ Compress prints JSON:
 }
 ```
 
-`adaptiveRatio` = compressed size / original size. Lower is better.  
-`huffmanRatio` = theoretical best huffman can do (Shannon entropy bound).
+Meaning:
+1. `adaptiveRatio = compressedSize / originalSize` (lower is better)
+2. `huffmanRatio` is entropy-based theoretical estimate
 
----
+## Method Tags
 
-## Methods
-
-| Tag | What it does | Best for |
+| Tag | Meaning | Typical case |
 |---|---|---|
-| `RLE` | run-length encoding | files with long repeated runs |
-| `GLOBAL_HUFF` | huffman on whole file | uniform data |
-| `BLOCK_HUFF` | huffman per 32KB block | files that change a lot |
-| `NONE` | no compression | near-random data |
+| `RLE` | Run-Length Encoding | long repeated runs |
+| `GLOBAL_HUFF` | one Huffman model | consistent symbol distribution |
+| `BLOCK_HUFF` | block-wise Huffman | mixed-content files |
+| `NONE` | no compression | near-random input |
 
-### Huffman header layout
+## Huffman Header Layout
 
-Only symbols that actually appear are stored:
+Only used symbols are stored:
 
-```
+```text
 [1 byte]  N = number of unique symbols
 [N bytes] symbol values
 [N bytes] code lengths
-[1 byte]  padding bits in last byte
-[rest]    bit-packed data
+[1 byte]  padding bits in final byte
+[rest]    bit-packed payload
 ```
 
----
+## Running Tests
 
-## Tests
-
-### C++
+### C++ tests
 
 ```bash
 make test
 ```
 
-Needs googletest and rapidcheck:
+### Backend tests
 
 ```bash
-brew install googletest
-
-git clone https://github.com/emil-e/rapidcheck.git /tmp/rapidcheck
-cd /tmp/rapidcheck && mkdir build && cd build
-cmake .. && make && sudo make install
+cd backend
+npm test -- --runInBand
 ```
 
-### Backend
+### Frontend tests
 
 ```bash
-cd backend && npm test
+cd frontend
+npm test -- --runInBand
 ```
 
-### Frontend
+## Useful Make Targets
 
-```bash
-cd frontend && npm install && npm test
-```
-
----
-
-## Project layout
-
-```
-.
-├── src/
-│   ├── main.cpp           # CLI entry
-│   ├── controller.cpp     # picks best method, handles decompress
-│   ├── block_huffman.cpp  # global + block huffman
-│   ├── rle.cpp            # run-length encoding
-│   ├── entropy.cpp        # entropy calculation
-│   ├── file_io.cpp        # file format pack/unpack
-│   └── huffman.cpp        # basic huffman (kept for reference)
-├── include/               # headers
-├── tests/                 # C++ tests
-├── backend/
-│   ├── server.js          # Express API
-│   └── tests/
-├── frontend/
-│   ├── index.html
-│   ├── script.js
-│   ├── style.css
-│   └── tests/
-├── data/                  # uploaded files
-├── results/               # output files
-├── Makefile
-└── zipper                 # compiled binary
-```
-
----
-
-## Makefile
-
-| Target | What it does |
+| Command | Purpose |
 |---|---|
-| `make build` | compile zipper |
-| `make test` | build and run C++ tests |
-| `make check` | compile check only |
-| `make clean` | remove build files |
+| `make build` | compile `zipper` binary |
+| `make test` | build + run C++ tests |
+| `make check` | compile-only check for tests |
+| `make clean` | remove generated build artifacts |
+
+## Project Structure
+
+```text
+.
+├── src/                  # C++ implementation
+├── include/              # C++ headers
+├── tests/                # C++ tests
+├── backend/              # Express server + tests
+├── frontend/             # browser client + tests
+├── data/                 # uploaded temp files
+├── results/              # generated output files
+├── Makefile
+└── zipper                # compiled binary
+```

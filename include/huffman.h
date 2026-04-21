@@ -6,7 +6,8 @@
 
 struct HuffmanResult {
     std::string encoded;
-    std::unordered_map<int, std::string> codeMap; // symbol (0-255) -> bit string
+    // symbol (0-255) -> canonical bit-string code used for decoding
+    std::unordered_map<int, std::string> codeMap;
 };
 
 HuffmanResult huffmanCompress(const std::string &data);

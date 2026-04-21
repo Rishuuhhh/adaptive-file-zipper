@@ -10,6 +10,10 @@ function formatEntropy(v) { return fmtEnt(v); }
 function formatRatio(v)   { return fmtRat(v); }
 function formatTime(v)    { return fmtTime(v); }
 
+function getById(id) {
+    return document.getElementById(id);
+}
+
 // Format a byte count as "512 B", "12.3 KB", or "3.45 MB".
 function formatSize(bytes) {
     if (bytes < 1024)        return `${bytes} B`;
@@ -26,39 +30,112 @@ function formatReduction(originalSize, compressedSize) {
 
 // Show error message and hide unrelated sections.
 function showErr(msg) {
-    const el = document.getElementById("error");
+    const el = getById("error");
     el.innerText = msg;
     el.classList.remove("hidden");
-    document.getElementById("status").classList.add("hidden");
-    document.getElementById("stats").classList.add("hidden");
+    getById("status").classList.add("hidden");
+    getById("stats").classList.add("hidden");
 }
 
 // Show status message.
 function showStatus(msg) {
-    const el = document.getElementById("status");
+    const el = getById("status");
     el.innerText = msg;
     el.classList.remove("hidden");
-    document.getElementById("error").classList.add("hidden");
+    getById("error").classList.add("hidden");
 }
 
 // Hide status and error messages.
 function clearMsgs() {
-    document.getElementById("error").classList.add("hidden");
-    document.getElementById("status").classList.add("hidden");
+    getById("error").classList.add("hidden");
+    getById("status").classList.add("hidden");
 }
 
 function showResults() {
-    document.getElementById("results").classList.remove("hidden");
+    getById("results").classList.remove("hidden");
+}
+
+function setActionButtonState(buttonId, isBusy, busyLabel, idleLabel) {
+    const button = getById(buttonId);
+    button.disabled = isBusy;
+    button.innerHTML = isBusy ? busyLabel : idleLabel;
+}
+
+function requestBodyForSelectedFile(fileInputElement) {
+    const selectedFile = fileInputElement.files[0];
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    return formData;
+}
+
+async function parseErrorMessage(response, fallbackMessage) {
+    try {
+        const responseBody = await response.json();
+        return responseBody.detail || responseBody.error || fallbackMessage;
+    } catch (_) {
+        return fallbackMessage;
+    }
+}
+
+function parseDownloadNameFromDisposition(dispositionHeader, fallbackName) {
+    if (!dispositionHeader) return fallbackName;
+    const match = dispositionHeader.match(/filename="?([^"]+)"?/);
+    return match ? match[1] : fallbackName;
+}
+
+function triggerBlobDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+
+    URL.revokeObjectURL(url);
+}
+
+function updateCompressionStats(stats) {
+    getById("entropy").innerText = fmtEnt(stats.entropy);
+    getById("method").innerText = stats.adaptiveMethod || "—";
+    getById("adaptive").innerText = fmtRat(stats.adaptiveRatio);
+    getById("huffman").innerText = fmtRat(stats.huffmanRatio);
+    getById("time").innerText = fmtTime(stats.time);
+
+    const originalSize = stats.originalSize;
+    const compressedSize = stats.compressedSize;
+
+    getById("originalSizeDisplay").innerText =
+        (originalSize !== undefined) ? formatSize(originalSize) : "—";
+    getById("compressedSizeDisplay").innerText =
+        (compressedSize !== undefined) ? formatSize(compressedSize) : "—";
+    getById("sizeReduction").innerText =
+        (originalSize !== undefined && compressedSize !== undefined)
+            ? formatReduction(originalSize, compressedSize)
+            : "—";
+
+    getById("stats").classList.remove("hidden");
+    getById("downloadLink").classList.add("hidden");
+}
+
+function statsFromResponseHeaders(headers) {
+    try {
+        const statsHeader = headers.get("X-Compression-Stats");
+        return statsHeader ? JSON.parse(statsHeader) : {};
+    } catch (_) {
+        return {};
+    }
 }
 
 // Handle file selection and drag-drop input.
-document.getElementById("fileInput").addEventListener("change", function () {
+getById("fileInput").addEventListener("change", function () {
     setFile(this.files[0]);
 });
 
-const dz = document.getElementById("dropZone");
+const dz = getById("dropZone");
 
-dz.addEventListener("click", () => document.getElementById("fileInput").click());
+dz.addEventListener("click", () => getById("fileInput").click());
 
 dz.addEventListener("dragover", (e) => {
     e.preventDefault();
@@ -74,160 +151,118 @@ dz.addEventListener("drop", (e) => {
     if (f) {
         const dt = new DataTransfer();
         dt.items.add(f);
-        document.getElementById("fileInput").files = dt.files;
+        getById("fileInput").files = dt.files;
         setFile(f);
     }
 });
 
 function setFile(f) {
     if (!f) return;
-    document.getElementById("fileName").innerText = f.name;
-    document.getElementById("selectedFile").classList.remove("hidden");
+    getById("fileName").innerText = f.name;
+    getById("selectedFile").classList.remove("hidden");
 }
 
 // Compress button handler.
 async function compressFile() {
-    const fi = document.getElementById("fileInput");
-    if (!fi.files.length) { alert("Please select a file first"); return; }
+    const fi = getById("fileInput");
+    if (!fi.files.length) {
+        alert("Please choose a file first.");
+        return;
+    }
 
-    const btn = document.getElementById("compressBtn");
-    btn.disabled = true;
-    btn.innerHTML = '<span class="btn-icon">⏳</span> Compressing...';
+    setActionButtonState(
+        "compressBtn",
+        true,
+        '<span class="btn-icon">⏳</span> Compressing...',
+        '<span class="btn-icon">🗜️</span> Compress'
+    );
 
     const originalFilename = fi.files[0].name;
-    const fd = new FormData();
-    fd.append("file", fi.files[0]);
+    const fd = requestBodyForSelectedFile(fi);
 
     try {
-        const res = await fetch('/compress', { method: "POST", body: fd });
+        const res = await fetch(`${API}/compress`, { method: "POST", body: fd });
 
         showResults();
 
         if (!res.ok) {
-            let errMsg = "Compression failed";
-            try { errMsg = (await res.json()).error || errMsg; } catch (_) {}
-            showErr(errMsg);
+            showErr(await parseErrorMessage(res, "Compression failed"));
             return;
         }
 
-        // Parse stats from response header; fall back to {} on parse failure.
-        let stats = {};
-        try {
-            const statsHeader = res.headers.get('X-Compression-Stats');
-            if (statsHeader) stats = JSON.parse(statsHeader);
-        } catch (_) {}
-
-        // Read the binary body as a Blob.
+        const stats = statsFromResponseHeaders(res.headers);
         const blob = await res.blob();
-
-        // Trigger programmatic download using a temporary object URL.
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = originalFilename + '.z';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        triggerBlobDownload(blob, originalFilename + ".z");
 
         clearMsgs();
-
-        // Populate Stats_Panel from the header stats.
-        document.getElementById("entropy").innerText  = fmtEnt(stats.entropy);
-        document.getElementById("method").innerText   = stats.adaptiveMethod || "—";
-        document.getElementById("adaptive").innerText = fmtRat(stats.adaptiveRatio);
-        document.getElementById("huffman").innerText  = fmtRat(stats.huffmanRatio);
-        document.getElementById("time").innerText     = fmtTime(stats.time);
-
-        // Populate Size_Card.
-        const origSize = stats.originalSize;
-        const compSize = stats.compressedSize;
-        document.getElementById("originalSizeDisplay").innerText =
-            (origSize !== undefined) ? formatSize(origSize) : "—";
-        document.getElementById("compressedSizeDisplay").innerText =
-            (compSize !== undefined) ? formatSize(compSize) : "—";
-        document.getElementById("sizeReduction").innerText =
-            (origSize !== undefined && compSize !== undefined)
-                ? formatReduction(origSize, compSize)
-                : "—";
-
-        document.getElementById("stats").classList.remove("hidden");
-
-        // Hide the legacy downloadLink element (download is now blob-driven).
-        document.getElementById("downloadLink").classList.add("hidden");
+        updateCompressionStats(stats);
 
     } catch (e) {
         showResults();
         showErr("Could not reach the server. Is it running on port 3000?");
     } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span class="btn-icon">🗜️</span> Compress';
+        setActionButtonState(
+            "compressBtn",
+            false,
+            '<span class="btn-icon">⏳</span> Compressing...',
+            '<span class="btn-icon">🗜️</span> Compress'
+        );
     }
 }
 
 // Decompress button handler.
 async function decompressFile() {
-    const fi = document.getElementById("fileInput");
-    if (!fi.files.length) { alert("Please select a file first"); return; }
+    const fi = getById("fileInput");
+    if (!fi.files.length) {
+        alert("Please choose a file first.");
+        return;
+    }
 
-    const btn = document.getElementById("decompressBtn");
-    btn.disabled = true;
-    btn.innerHTML = '<span class="btn-icon">⏳</span> Decompressing...';
+    setActionButtonState(
+        "decompressBtn",
+        true,
+        '<span class="btn-icon">⏳</span> Decompressing...',
+        '<span class="btn-icon">📂</span> Decompress'
+    );
 
-    const fd = new FormData();
-    fd.append("file", fi.files[0]);
+    const fd = requestBodyForSelectedFile(fi);
 
     try {
-        const res = await fetch('/decompress', { method: "POST", body: fd });
+        const res = await fetch(`${API}/decompress`, { method: "POST", body: fd });
 
         showResults();
 
         if (!res.ok) {
-            let msg = "Decompression failed";
-            try {
-                const body = await res.json();
-                msg = body.detail || body.error || msg;
-            } catch (_) {}
-            showErr(msg);
+            showErr(await parseErrorMessage(res, "Decompression failed"));
             return;
         }
 
         const blob = await res.blob();
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement("a");
-        a.href     = url;
 
-        // Use Content-Disposition filename from server (original file extension preserved).
-        const disposition = res.headers && res.headers.get
-            ? res.headers.get('Content-Disposition')
-            : null;
-        let downloadName = "decompressed_output";
-        if (disposition) {
-            const match = disposition.match(/filename="?([^"]+)"?/);
-            if (match) downloadName = match[1];
-        }
-        // Fallback: strip .z from uploaded filename.
-        if (downloadName === "decompressed_output") {
-            const name = fi.files[0].name;
-            downloadName = name.endsWith(".z") ? name.slice(0, -2) : name;
-        }
-        a.download = downloadName;
+        const fallbackName = fi.files[0].name.endsWith(".z")
+            ? fi.files[0].name.slice(0, -2)
+            : fi.files[0].name;
+        const downloadName = parseDownloadNameFromDisposition(
+            res.headers && res.headers.get ? res.headers.get("Content-Disposition") : null,
+            fallbackName
+        );
 
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        triggerBlobDownload(blob, downloadName);
 
         clearMsgs();
-        document.getElementById("stats").classList.add("hidden");
-        document.getElementById("downloadLink").classList.add("hidden");
+        getById("stats").classList.add("hidden");
+        getById("downloadLink").classList.add("hidden");
         showStatus("Decompression done — file downloaded");
 
     } catch (e) {
         showResults();
         showErr("Could not reach the server. Is it running on port 3000?");
     } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span class="btn-icon">📂</span> Decompress';
+        setActionButtonState(
+            "decompressBtn",
+            false,
+            '<span class="btn-icon">⏳</span> Decompressing...',
+            '<span class="btn-icon">📂</span> Decompress'
+        );
     }
 }

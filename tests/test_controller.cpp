@@ -107,7 +107,7 @@ RC_GTEST_PROP(Controller, AdaptiveRatioCorrect, ()) {
 RC_GTEST_PROP(Controller, RoundTrip, ()) {
     auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
     auto r = runAdaptiveCompression(in);
-    RC_ASSERT(runDecompression(r.compressedData) == in);
+    RC_ASSERT(runDecompression(r.compressedData).data == in);
 }
 
 // Feature: frontend-compression-enhancements, Property 9: Compression round-trip (binary data)
@@ -116,7 +116,7 @@ RC_GTEST_PROP(Controller, RoundTripBinaryData, ()) {
     // Generate arbitrary byte sequences (including null bytes and all 0x00–0xFF values).
     auto in = *rc::gen::nonEmpty(rc::gen::container<std::string>(rc::gen::arbitrary<char>()));
     auto r = runAdaptiveCompression(in);
-    RC_ASSERT(runDecompression(r.compressedData) == in);
+    RC_ASSERT(runDecompression(r.compressedData).data == in);
 }
 
 // Feature: frontend-compression-enhancements, Property 10: Method tag is always a valid value
@@ -179,6 +179,6 @@ TEST(Controller, UnknownMethodTagThrows) {
 TEST(Controller, EmptyInputCompressesToNoneAndRoundTrips) {
     CompressionResult r = runAdaptiveCompression("");
     ASSERT_EQ(r.method, "NONE");
-    std::string decompressed = runDecompression(r.compressedData);
+    std::string decompressed = runDecompression(r.compressedData).data;
     ASSERT_EQ(decompressed, "");
 }

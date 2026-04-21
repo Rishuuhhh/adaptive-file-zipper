@@ -4,18 +4,26 @@
 
 using namespace std;
 
-double calculateEntropy(const string &data) {
-    if (data.empty()) return 0.0;
-    unordered_map<char, int> frequencies;
+static unordered_map<unsigned char, int> buildFrequencyTable(const string &inputData) {
+    unordered_map<unsigned char, int> frequencies;
+    for (unsigned char byteValue : inputData) {
+        frequencies[byteValue]++;
+    }
+    return frequencies;
+}
 
-    // Count how many times each byte value appears in the input.
-    for (char c : data) frequencies[c]++;
+double calculateEntropy(const string &inputData) {
+    if (inputData.empty()) return 0.0;
+
+    unordered_map<unsigned char, int> frequencies = buildFrequencyTable(inputData);
 
     double entropy = 0.0;
-    int inputSize = data.size();
-    for (auto &entry : frequencies) {
-        double probability = (double)entry.second / inputSize;
+    double totalSymbols = static_cast<double>(inputData.size());
+
+    for (const auto &entry : frequencies) {
+        double probability = static_cast<double>(entry.second) / totalSymbols;
         entropy -= probability * log2(probability);
     }
+
     return entropy;
 }

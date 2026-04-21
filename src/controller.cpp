@@ -6,26 +6,33 @@
 
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
 using namespace std;
 using namespace chrono;
 
-// Estimate achievable Huffman compression ratio from entropy.
-static double estHuffRatio(const string &d) {
-    if (d.empty()) return 1.0;
+// Estimate achievable Huffman ratio using Shannon entropy.
+// Keeping this separate makes it easier to reason about stats shown in UI.
+static double estimateHuffmanRatio(const string &inputData) {
+    if (inputData.empty()) return 1.0;
+
     int fr[256] = {};
-    for (int i = 0; i < (int)d.size(); i++)
-        fr[(unsigned char)d[i]]++;
-    double h = 0.0, n = (double)d.size();
+    for (int i = 0; i < static_cast<int>(inputData.size()); i++) {
+        fr[static_cast<unsigned char>(inputData[i])]++;
+    }
+
+    double entropy = 0.0;
+    double inputSize = static_cast<double>(inputData.size());
     for (int i = 0; i < 256; i++) {
         if (fr[i] > 0) {
-            double p = fr[i] / n;
-            h -= p * log2(p);
+            double probability = fr[i] / inputSize;
+            entropy -= probability * log2(probability);
         }
     }
-    return (h * n / 8.0) / n;
+
+    return entropy / 8.0;
 }
 
 // Stores one candidate method with its output and ratio.
@@ -35,84 +42,97 @@ struct Cand {
     double rat;
 };
 
+static vector<Cand> buildCompressionCandidates(const string &inputData) {
+    const double originalSize = static_cast<double>(inputData.size());
+
+    string rleOutput = rleCompress(inputData);
+    string globalHuffmanOutput = globalHuffmanCompress(inputData);
+    string blockHuffmanOutput = blockSplitCompress(inputData);
+
+    return {
+        {"RLE", rleOutput, static_cast<double>(rleOutput.size()) / originalSize},
+        {"GLOBAL_HUFF", globalHuffmanOutput, static_cast<double>(globalHuffmanOutput.size()) / originalSize},
+        {"BLOCK_HUFF", blockHuffmanOutput, static_cast<double>(blockHuffmanOutput.size()) / originalSize}
+    };
+}
+
+static Cand pickBestCandidate(const vector<Cand> &candidates) {
+    int bestIndex = 0;
+    for (int i = 1; i < static_cast<int>(candidates.size()); i++) {
+        if (candidates[i].rat < candidates[bestIndex].rat) {
+            bestIndex = i;
+        }
+    }
+    return candidates[bestIndex];
+}
+
 // Try three methods and select the best one.
-CompressionResult runAdaptiveCompression(const string &d, const string &originalFilename) {
+CompressionResult runAdaptiveCompression(const string &inputData, const string &originalFilename) {
     auto t0 = high_resolution_clock::now();
 
-    if (d.empty()) {
+    if (inputData.empty()) {
         string pk = serializeCompressedData("NONE", 0.0, "", "", originalFilename);
         return {"NONE", 0.0, 1.0, 1.0, 0.0, pk, originalFilename};
     }
 
-    double ent = calculateEntropy(d);
-    double orig = (double)d.size();
-    double hr = estHuffRatio(d);
+    double entropy = calculateEntropy(inputData);
+    double estimatedHuffmanRatio = estimateHuffmanRatio(inputData);
 
     // Near-random data usually does not benefit from compression.
-    if (ent >= 7.8) {
+    if (entropy >= 7.8) {
         auto t1 = high_resolution_clock::now();
         double ms = duration<double, milli>(t1 - t0).count();
-        string pk = serializeCompressedData("NONE", ent, "", d, originalFilename);
-        return {"NONE", ent, 1.0, hr, ms, pk, originalFilename};
+        string pk = serializeCompressedData("NONE", entropy, "", inputData, originalFilename);
+        return {"NONE", entropy, 1.0, estimatedHuffmanRatio, ms, pk, originalFilename};
     }
 
-    // Try RLE.
-    string ro = rleCompress(d);
-    double rr = (double)ro.size() / orig;
-
-    // Try global Huffman.
-    string go = globalHuffmanCompress(d);
-    double gr = (double)go.size() / orig;
-
-    // Try block-split Huffman.
-    string bo = blockSplitCompress(d);
-    double br = (double)bo.size() / orig;
-
-    // Select the smallest output among all candidates.
-    vector<Cand> cv = {
-        {"RLE",         ro, rr},
-        {"GLOBAL_HUFF", go, gr},
-        {"BLOCK_HUFF",  bo, br}
-    };
-
-    int bi = 0;
-    for (int i = 1; i < (int)cv.size(); i++)
-        if (cv[i].rat < cv[bi].rat) bi = i;
-
-    string meth = cv[bi].meth;
-    string pay  = cv[bi].out;
-    double ar   = cv[bi].rat;
+    vector<Cand> candidates = buildCompressionCandidates(inputData);
+    Cand bestCandidate = pickBestCandidate(candidates);
 
     auto t1 = high_resolution_clock::now();
     double ms = duration<double, milli>(t1 - t0).count();
 
-    // Build the candidate blob and check if it is actually smaller than the
-    // original. If the header + payload overhead makes the blob larger, fall
-    // back to NONE (store as-is) so the .z file is never bigger than the input.
-    string pk = serializeCompressedData(meth, ent, "", pay, originalFilename);
-    if (pk.size() >= d.size()) {
-        string nonePk = serializeCompressedData("NONE", ent, "", d, originalFilename);
-        return {"NONE", ent, 1.0, hr, ms, nonePk, originalFilename};
-    }
+    // Build packed output from the best candidate method.
+    string packedBest = serializeCompressedData(
+        bestCandidate.meth,
+        entropy,
+        "",
+        bestCandidate.out,
+        originalFilename
+    );
 
-    return {meth, ent, ar, hr, ms, pk, originalFilename};
+    return {
+        bestCandidate.meth,
+        entropy,
+        bestCandidate.rat,
+        estimatedHuffmanRatio,
+        ms,
+        packedBest,
+        originalFilename
+    };
 }
 
 // Dispatch decompression based on stored method tag.
 DecompressionResult runDecompression(const string &pk) {
+    if (pk.empty()) {
+        throw runtime_error("Cannot decompress empty input");
+    }
+
     string meth, cms, pay, origFilename;
     double ent;
     deserializeCompressedData(pk, meth, ent, cms, pay, origFilename);
 
     string data;
-    if (meth == "RLE")
+    if (meth == "RLE") {
+        // RLE payload is raw run records.
         data = rleDecompress(pay);
-    else if (meth == "GLOBAL_HUFF" || meth == "BLOCK_HUFF")
+    } else if (meth == "GLOBAL_HUFF" || meth == "BLOCK_HUFF") {
+        // Both variants use the same payload format with mode marker inside.
         data = blockHuffmanDecompress(pay, {});
-    else if (meth == "NONE")
+    } else if (meth == "NONE") {
         data = pay;
-    // Backward compatibility for legacy method tags.
-    else if (meth == "BLOCK_HUFFMAN" || meth == "RLE_HUFFMAN") {
+    } else if (meth == "BLOCK_HUFFMAN" || meth == "RLE_HUFFMAN") {
+        // Backward compatibility for legacy method tags.
         auto cm = deserializeCodeMap(cms);
         if (meth == "RLE_HUFFMAN") {
             string rd = blockHuffmanDecompress(pay, cm);
@@ -121,7 +141,7 @@ DecompressionResult runDecompression(const string &pk) {
             data = blockHuffmanDecompress(pay, cm);
         }
     } else {
-        throw std::runtime_error("Unknown method: " + meth);
+        throw runtime_error("Unknown method: " + meth);
     }
 
     return {data, origFilename};

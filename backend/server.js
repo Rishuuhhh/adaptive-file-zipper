@@ -26,6 +26,8 @@ const zipperPath = zipperCandidates.find((p) => fs.existsSync(p));
 const uploadDir  = path.join(__dirname, "../data");
 const resultDir  = path.join(__dirname, "../results");
 
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
 // Create data/result directories if they do not exist.
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 if (!fs.existsSync(resultDir)) fs.mkdirSync(resultDir, { recursive: true });
@@ -42,32 +44,122 @@ const storage = multer.diskStorage({
     filename:    (req, file, cb) => cb(null, Date.now() + "_" + file.originalname)
 });
 
-// 50 MB upload limit.
-const MAX_FILE_SIZE = 50 * 1024 * 1024;
-
 const upload = multer({
     storage,
     limits: { fileSize: MAX_FILE_SIZE }
 });
 
-// Compress endpoint.
-app.post("/compress", upload.single("file"), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-    if (!zipperPath) {
-        return res.status(500).json({
-            error: "Server misconfiguration: zipper binary not found"
-        });
+function ensureUploadPresent(req, res) {
+    if (req.file) return true;
+    res.status(400).json({ error: "No file uploaded" });
+    return false;
+}
+
+function ensureZipperConfigured(res) {
+    if (zipperPath) return true;
+    res.status(500).json({ error: "Server misconfiguration: zipper binary not found" });
+    return false;
+}
+
+function cleanTempFile(filePath) {
+    if (!filePath) return;
+    fs.unlink(filePath, () => {});
+}
+
+function parseJsonSafely(rawText) {
+    try {
+        return JSON.parse(rawText);
+    } catch (_) {
+        return null;
+    }
+}
+
+function getExecutionErrorDetail(err, stderr, stdout) {
+    const parsed = parseJsonSafely(stdout);
+    if (parsed && parsed.error) return parsed.error;
+    return (stderr || err.message || "Unknown execution error").trim();
+}
+
+function buildCompressionStats(rawStats, uploadedSize, compressedSize) {
+    return {
+        entropy: rawStats && rawStats.entropy,
+        adaptiveMethod: rawStats && rawStats.adaptiveMethod,
+        adaptiveRatio: rawStats && rawStats.adaptiveRatio,
+        huffmanRatio: rawStats && rawStats.huffmanRatio,
+        time: rawStats && rawStats.time,
+        originalSize: uploadedSize,
+        compressedSize
+    };
+}
+
+function readOutputFileOrRespond(filePath, res) {
+    try {
+        return fs.readFileSync(filePath);
+    } catch (error) {
+        console.error("Could not read compressed file", { path: filePath, error: error.message });
+        res.status(500).json({ error: "Could not read compressed file", detail: error.message });
+        return null;
+    }
+}
+
+function respondCompressionSuccess(res, originalFilename, stats, compressedBuffer) {
+    res.set("Content-Type", "application/octet-stream");
+    res.set("Content-Disposition", `attachment; filename="${originalFilename}.z"`);
+    res.set("X-Compression-Stats", JSON.stringify(stats));
+    res.send(compressedBuffer);
+}
+
+function createOutputPaths(fileRecord) {
+    return {
+        compressOutputPath: path.join(resultDir, "compressed_" + fileRecord.filename + ".z"),
+        decompressOutputPath: path.join(resultDir, "decompressed_" + fileRecord.filename)
+    };
+}
+
+function sendDecompressedFile(res, outputPath, downloadName) {
+    res.download(outputPath, downloadName, (downloadErr) => {
+        cleanTempFile(outputPath);
+        if (downloadErr && !res.headersSent) {
+            res.status(500).json({ error: "Failed to send decompressed file" });
+        }
+    });
+}
+
+function resolveDecompressDownloadName(stdout, uploadedFilename) {
+    const parsed = parseJsonSafely(stdout);
+    if (parsed && parsed.originalFilename) {
+        return parsed.originalFilename;
     }
 
-    const inp = req.file.path;
+    return uploadedFilename.endsWith(".z")
+        ? uploadedFilename.slice(0, -2)
+        : uploadedFilename;
+}
+
+function isValidDownloadPath(targetPath) {
+    if (typeof targetPath !== "string" || targetPath.trim().length === 0) {
+        return false;
+    }
+
+    // Reject obvious malformed input, but keep backward compatibility for absolute paths.
+    return !targetPath.includes("\0");
+}
+
+// Compress endpoint.
+app.post("/compress", upload.single("file"), (req, res) => {
+    if (!ensureUploadPresent(req, res)) return;
+    if (!ensureZipperConfigured(res)) return;
+
+    const inputPath = req.file.path;
     const originalFilename = req.file.originalname;
-    const out = path.join(resultDir, "compressed_" + req.file.filename + ".z");
-    execFile(zipperPath, ["compress", inp, out], (err, stdout, stderr) => {
+    const { compressOutputPath } = createOutputPaths(req.file);
+
+    execFile(zipperPath, ["compress", inputPath, compressOutputPath], (err, stdout, stderr) => {
         // Always clean up the uploaded input file.
-        fs.unlink(inp, () => {});
+        cleanTempFile(inputPath);
 
         if (err) {
-            const detail = (stderr || err.message || "Unknown execution error").trim();
+            const detail = getExecutionErrorDetail(err, stderr, stdout);
             console.error("Compression failed", {
                 message: err.message,
                 code: err.code,
@@ -76,105 +168,68 @@ app.post("/compress", upload.single("file"), (req, res) => {
             return res.status(500).json({ error: "Compression failed", detail });
         }
 
-        let json;
-        try {
-            json = JSON.parse(stdout);
-        } catch (e) {
+        const compressorResponse = parseJsonSafely(stdout);
+        if (!compressorResponse) {
             console.error("Invalid compressor JSON", { stdout, stderr });
             return res.status(500).json({ error: "Invalid JSON from C++" });
         }
 
-        let buf;
-        try {
-            buf = fs.readFileSync(out);
-        } catch (e) {
-            console.error("Could not read compressed file", { path: out, error: e.message });
-            return res.status(500).json({
-                error: "Could not read compressed file",
-                detail: e.message
-            });
-        }
+        const compressedBuffer = readOutputFileOrRespond(compressOutputPath, res);
+        if (!compressedBuffer) return;
 
-        const stats = {
-            entropy:        json.entropy,
-            adaptiveMethod: json.adaptiveMethod,
-            adaptiveRatio:  json.adaptiveRatio,
-            huffmanRatio:   json.huffmanRatio,
-            time:           json.time,
-            originalSize:   req.file.size,  // actual uploaded file size from multer
-            compressedSize: buf.length      // actual compressed file size on disk
-        };
+        const stats = buildCompressionStats(
+            compressorResponse,
+            req.file.size,
+            compressedBuffer.length
+        );
 
-        res.set("Content-Type", "application/octet-stream");
-        res.set("Content-Disposition", `attachment; filename="${originalFilename}.z"`);
-        res.set("X-Compression-Stats", JSON.stringify(stats));
-        res.send(buf);
+        respondCompressionSuccess(res, originalFilename, stats, compressedBuffer);
 
         // Clean up the compressed output file after sending.
-        fs.unlink(out, () => {});
+        cleanTempFile(compressOutputPath);
     });
 });
 
 // Decompress endpoint.
 app.post("/decompress", upload.single("file"), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-    if (!zipperPath) {
-        return res.status(500).json({
-            error: "Server misconfiguration: zipper binary not found"
-        });
-    }
+    if (!ensureUploadPresent(req, res)) return;
+    if (!ensureZipperConfigured(res)) return;
 
-    const inp = req.file.path;
-    const out = path.join(resultDir, "decompressed_" + req.file.filename);
-    execFile(zipperPath, ["decompress", inp, out], (err, stdout, stderr) => {
+    const inputPath = req.file.path;
+    const { decompressOutputPath } = createOutputPaths(req.file);
+
+    execFile(zipperPath, ["decompress", inputPath, decompressOutputPath], (err, stdout, stderr) => {
         // Always clean up the uploaded input file.
-        fs.unlink(inp, () => {});
+        cleanTempFile(inputPath);
 
         if (err) {
-            // The zipper prints its error message to stdout as JSON; fall back to stderr.
-            let detail = "";
-            try {
-                const parsed = JSON.parse(stdout);
-                detail = parsed.error || "";
-            } catch (_) {}
-            if (!detail) detail = (stderr || err.message || "Unknown execution error").trim();
+            const detail = getExecutionErrorDetail(err, stderr, stdout);
             console.error("Decompression failed", { message: err.message, code: err.code, detail });
             return res.status(500).json({ error: "Decompression failed", detail });
         }
 
         // Verify the output file exists before attempting to send it.
-        if (!fs.existsSync(out)) {
+        if (!fs.existsSync(decompressOutputPath)) {
             return res.status(500).json({ error: "Decompressed file not found" });
         }
 
-        // Determine the original filename for the download.
-        // The C++ binary emits { "status": "done", "originalFilename": "..." } on stdout.
-        let downloadName = "decompressed_output";
-        try {
-            const parsed = JSON.parse(stdout);
-            if (parsed.originalFilename) downloadName = parsed.originalFilename;
-        } catch (_) {}
-        // Fallback: strip .z extension from the uploaded filename.
-        if (downloadName === "decompressed_output") {
-            const base = req.file.originalname;
-            downloadName = base.endsWith(".z") ? base.slice(0, -2) : base;
-        }
-
-        res.download(out, downloadName, (downloadErr) => {
-            // Clean up the output file after sending (or on error).
-            fs.unlink(out, () => {});
-            if (downloadErr && !res.headersSent) {
-                res.status(500).json({ error: "Failed to send decompressed file" });
-            }
-        });
+        const downloadName = resolveDecompressDownloadName(stdout, req.file.originalname);
+        sendDecompressedFile(res, decompressOutputPath, downloadName);
     });
 });
 
 // Download endpoint for compressed files.
 app.get("/download", (req, res) => {
-    const fp = req.query.path;
-    if (!fs.existsSync(fp)) return res.status(404).send("File not found");
-    res.download(fp);
+    const requestedPath = req.query.path;
+    if (!isValidDownloadPath(requestedPath)) {
+        return res.status(400).send("Invalid download path");
+    }
+
+    if (!fs.existsSync(requestedPath)) {
+        return res.status(404).send("File not found");
+    }
+
+    res.download(requestedPath);
 });
 
 const PORT = Number(process.env.PORT) || 3000;

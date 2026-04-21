@@ -110,12 +110,20 @@ static void wHdr(int ln[256], int pad, string &out) {
 
 // Parse header and fill lengths/padding.
 static int rHdr(const string &s, int pos, int ln[256], int &pad) {
+    if (pos >= (int)s.size()) return -1;
+
     int st = pos;
     int N = (unsigned char)s[pos++];
+
+    if (N < 0 || N > 256) return -1;
+    if (pos + N + N + 1 > (int)s.size()) return -1;
+
     int sym[256] = {};
     for (int i = 0; i < N; i++) sym[i] = (unsigned char)s[pos++];
     for (int i = 0; i < N; i++) ln[sym[i]] = (unsigned char)s[pos++];
     pad = (unsigned char)s[pos++];
+    if (pad < 0 || pad > 7) return -1;
+
     return pos - st;
 }
 
@@ -203,6 +211,8 @@ static void wI32(string &out, int v) {
 
 // Read 32-bit integer from 4 bytes (big-endian).
 static int rI32(const string &s, int p) {
+    if (p < 0 || p + 3 >= (int)s.size()) return -1;
+
     return ((unsigned char)s[p]   << 24)
          | ((unsigned char)s[p+1] << 16)
          | ((unsigned char)s[p+2] <<  8)
@@ -300,17 +310,21 @@ string blockHuffmanDecompress(const string &enc,
         int ln[256] = {};
         int pad = 0;
         int used = rHdr(enc, pos, ln, pad);
+        if (used <= 0) return "";
         int dstart = pos + used;
+        if (dstart > (int)enc.size()) return "";
 
         unsigned int cd[256] = {};
         mkCodes(ln, cd);
 
         // Single-symbol edge case.
+        if ((int)enc.size() < 5) return "";
         int N = (unsigned char)enc[1];
         if (N == 1) {
             int sym = (unsigned char)enc[2];
             int p   = (unsigned char)enc[4];
             int tb  = ((int)enc.size() - dstart) * 8 - p;
+            if (tb < 0) return "";
             return string(tb, (char)sym);
         }
 
@@ -320,16 +334,21 @@ string blockHuffmanDecompress(const string &enc,
     if (mode == 'B') {
         int pos = 1;
         int nb = rI32(enc, pos); pos += 4;
+        if (nb < 0) return "";
         string res;
 
         for (int b = 0; b < nb; b++) {
             int bsz = rI32(enc, pos); pos += 4;
+            if (bsz < 0) return "";
             int bend = pos + bsz;
+            if (bend > (int)enc.size()) return "";
 
             int ln[256] = {};
             int pad = 0;
             int used = rHdr(enc, pos, ln, pad);
+            if (used <= 0) return "";
             int dstart = pos + used;
+            if (dstart > bend) return "";
 
             unsigned int cd[256] = {};
             mkCodes(ln, cd);

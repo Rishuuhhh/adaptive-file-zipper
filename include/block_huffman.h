@@ -6,13 +6,14 @@
 
 struct BlockResult {
     std::string encoded;
+    // Kept for backward compatibility with old decoder signatures.
     std::unordered_map<std::string, std::string> codeMap;
 };
 
-// Adaptive: internally picks global vs block-split, whichever is smaller
+// Adaptive wrapper: chooses global or block-split Huffman based on output size.
 BlockResult blockHuffmanCompress(const std::string &data);
 
-// Exposed individually so the controller can compare all strategies
+// Exposed separately so controller can compare methods explicitly.
 std::string globalHuffmanCompress(const std::string &data);
 std::string blockSplitCompress(const std::string &data);
 
