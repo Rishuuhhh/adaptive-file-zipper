@@ -2,10 +2,10 @@
 #define RLE_H
 
 #include <string>
-
+using namespace std;
 static const int MAX_RUN_LENGTH = 65535;
 
-std::string rleCompress(const std::string &data);
-std::string rleDecompress(const std::string &data);
+ string rleCompress(const  string &data);
+ string rleDecompress(const  string &data);
 
 #endif

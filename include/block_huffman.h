@@ -3,16 +3,15 @@
 
 #include <string>
 #include <unordered_map>
-
+using namespace std;
 struct BlockResult {
-    std::string encoded;
-    std::unordered_map<std::string, std::string> codeMap;
+    string encoded;
+    unordered_map<string, string> codeMap;
 };
 
-BlockResult blockHuffmanCompress(const std::string &data);
-std::string globalHuffmanCompress(const std::string &data);
-std::string blockSplitCompress(const std::string &data);
-std::string blockHuffmanDecompress(const std::string &encoded,
-                                   const std::unordered_map<std::string, std::string> &codeMap);
+BlockResult blockHuffmanCompress(const string &data);
+string globalHuffmanCompress(const string &data);
+string blockSplitCompress(const string &data);
+string blockHuffmanDecompress(const string &encoded, const unordered_map<string, string> & codeMap);
 
 #endif

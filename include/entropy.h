@@ -2,7 +2,7 @@
 #define ENTROPY_H
 
 #include <string>
-
-double calculateEntropy(const std::string &data);
+using namespace std;
+double calculateEntropy(const string &data);
 
 #endif

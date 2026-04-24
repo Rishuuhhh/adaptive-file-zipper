@@ -3,14 +3,14 @@
 
 #include <string>
 #include <unordered_map>
-
+using namespace std;
 struct HuffmanResult {
-    std::string encoded;
-    std::unordered_map<int, std::string> codeMap;
+     string encoded;
+     unordered_map<int,  string> codeMap;
 };
 
-HuffmanResult huffmanCompress(const std::string &data);
-std::string huffmanDecompress(const std::string &encoded,
-                              const std::unordered_map<int, std::string> &codeMap);
+HuffmanResult huffmanCompress(const  string &data);
+ string huffmanDecompress(const  string &encoded,
+                              const  unordered_map<int,  string> &codeMap);
 
 #endif

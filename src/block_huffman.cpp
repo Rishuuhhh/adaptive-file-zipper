@@ -89,9 +89,7 @@ static void buildCanonicalCodes(int lengths[256], unsigned int codes[256]) {
     }
 }
 
-static void encodeToBitstream(const char *input, int inputLen,
-                               int lengths[256], unsigned int codes[256],
-                               vector<char> &bitstream, int &paddingBits) {
+static void encodeToBitstream(const char *input, int inputLen,int lengths[256], unsigned int codes[256],vector<char> &bitstream, int &paddingBits) {
     int currentByte = 0;
     int bitsInByte  = 0;
 
@@ -119,8 +117,7 @@ static void encodeToBitstream(const char *input, int inputLen,
     }
 }
 
-static string decodeFromBitstream(const string &data, int dataStart, int dataEnd,
-                                   int paddingBits, int lengths[256], unsigned int codes[256]) {
+static string decodeFromBitstream(const string &data, int dataStart, int dataEnd,int paddingBits, int lengths[256], unsigned int codes[256]) {
     unordered_map<unsigned int, int> lookup;
     int maxLength = 0;
 

@@ -87,10 +87,7 @@ static string sanitizeFilename(const string &name) {
     return safe;
 }
 
-string serializeCompressedData(const string &method, double entropy,
-                               const string &codeMapData,
-                               const string &payload,
-                               const string &originalFilename) {
+string serializeCompressedData(const string &method, double entropy, const string &codeMapData, const string &payload, const string &originalFilename) {
     string safeName = sanitizeFilename(originalFilename);
 
     return method + "\n"
@@ -101,9 +98,7 @@ string serializeCompressedData(const string &method, double entropy,
          + payload;
 }
 
-void deserializeCompressedData(const string &blob, string &method,
-                               double &entropy, string &codeMapData,
-                               string &payload, string &originalFilename) {
+void deserializeCompressedData(const string &blob, string &method, double &entropy, string &codeMapData, string &payload, string &originalFilename) {
     int pos = 0;
     int blobSize = (int)blob.size();
 
