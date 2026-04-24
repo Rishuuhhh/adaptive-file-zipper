@@ -1,11 +1,9 @@
 const API = "";
 
-// Number-format helper functions.
 function fmtEnt(v)  { return `${Number(v).toFixed(4)} bits/char`; }
 function fmtRat(v)  { return `${(Number(v) * 100).toFixed(1)}%`; }
 function fmtTime(v) { return `${Number(v).toFixed(2)} ms`; }
 
-// Aliases for test compatibility.
 function formatEntropy(v) { return fmtEnt(v); }
 function formatRatio(v)   { return fmtRat(v); }
 function formatTime(v)    { return fmtTime(v); }
@@ -14,21 +12,17 @@ function getById(id) {
     return document.getElementById(id);
 }
 
-// Format a byte count as "512 B", "12.3 KB", or "3.45 MB".
 function formatSize(bytes) {
-    if (bytes < 1024)        return `${bytes} B`;
-    if (bytes < 1048576)     return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024)     return `${bytes} B`;
+    if (bytes < 1048576)  return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / 1048576).toFixed(2)} MB`;
 }
 
-// Format size reduction as a percentage with one decimal place.
-// Returns "0.0%" when originalSize === 0 to avoid division by zero.
 function formatReduction(originalSize, compressedSize) {
     if (originalSize === 0) return "0.0%";
     return `${((1 - compressedSize / originalSize) * 100).toFixed(1)}%`;
 }
 
-// Show error message and hide unrelated sections.
 function showErr(msg) {
     const el = getById("error");
     el.innerText = msg;
@@ -37,7 +31,6 @@ function showErr(msg) {
     getById("stats").classList.add("hidden");
 }
 
-// Show status message.
 function showStatus(msg) {
     const el = getById("status");
     el.innerText = msg;
@@ -45,7 +38,6 @@ function showStatus(msg) {
     getById("error").classList.add("hidden");
 }
 
-// Hide status and error messages.
 function clearMsgs() {
     getById("error").classList.add("hidden");
     getById("status").classList.add("hidden");
@@ -62,16 +54,15 @@ function setActionButtonState(buttonId, isBusy, busyLabel, idleLabel) {
 }
 
 function requestBodyForSelectedFile(fileInputElement) {
-    const selectedFile = fileInputElement.files[0];
     const formData = new FormData();
-    formData.append("file", selectedFile);
+    formData.append("file", fileInputElement.files[0]);
     return formData;
 }
 
 async function parseErrorMessage(response, fallbackMessage) {
     try {
-        const responseBody = await response.json();
-        return responseBody.detail || responseBody.error || fallbackMessage;
+        const body = await response.json();
+        return body.detail || body.error || fallbackMessage;
     } catch (_) {
         return fallbackMessage;
     }
@@ -97,23 +88,19 @@ function triggerBlobDownload(blob, filename) {
 }
 
 function updateCompressionStats(stats) {
-    getById("entropy").innerText = fmtEnt(stats.entropy);
-    getById("method").innerText = stats.adaptiveMethod || "—";
+    getById("entropy").innerText  = fmtEnt(stats.entropy);
+    getById("method").innerText   = stats.adaptiveMethod || "—";
     getById("adaptive").innerText = fmtRat(stats.adaptiveRatio);
-    getById("huffman").innerText = fmtRat(stats.huffmanRatio);
-    getById("time").innerText = fmtTime(stats.time);
+    getById("huffman").innerText  = fmtRat(stats.huffmanRatio);
+    getById("time").innerText     = fmtTime(stats.time);
 
-    const originalSize = stats.originalSize;
-    const compressedSize = stats.compressedSize;
+    const orig = stats.originalSize;
+    const comp = stats.compressedSize;
 
-    getById("originalSizeDisplay").innerText =
-        (originalSize !== undefined) ? formatSize(originalSize) : "—";
-    getById("compressedSizeDisplay").innerText =
-        (compressedSize !== undefined) ? formatSize(compressedSize) : "—";
+    getById("originalSizeDisplay").innerText  = (orig !== undefined) ? formatSize(orig) : "—";
+    getById("compressedSizeDisplay").innerText = (comp !== undefined) ? formatSize(comp) : "—";
     getById("sizeReduction").innerText =
-        (originalSize !== undefined && compressedSize !== undefined)
-            ? formatReduction(originalSize, compressedSize)
-            : "—";
+        (orig !== undefined && comp !== undefined) ? formatReduction(orig, comp) : "—";
 
     getById("stats").classList.remove("hidden");
     getById("downloadLink").classList.add("hidden");
@@ -121,14 +108,13 @@ function updateCompressionStats(stats) {
 
 function statsFromResponseHeaders(headers) {
     try {
-        const statsHeader = headers.get("X-Compression-Stats");
-        return statsHeader ? JSON.parse(statsHeader) : {};
+        const raw = headers.get("X-Compression-Stats");
+        return raw ? JSON.parse(raw) : {};
     } catch (_) {
         return {};
     }
 }
 
-// Handle file selection and drag-drop input.
 getById("fileInput").addEventListener("change", function () {
     setFile(this.files[0]);
 });
@@ -162,7 +148,6 @@ function setFile(f) {
     getById("selectedFile").classList.remove("hidden");
 }
 
-// Compress button handler.
 async function compressFile() {
     const fi = getById("fileInput");
     if (!fi.files.length) {
@@ -170,12 +155,9 @@ async function compressFile() {
         return;
     }
 
-    setActionButtonState(
-        "compressBtn",
-        true,
+    setActionButtonState("compressBtn", true,
         '<span class="btn-icon">⏳</span> Compressing...',
-        '<span class="btn-icon">🗜️</span> Compress'
-    );
+        '<span class="btn-icon">🗜️</span> Compress');
 
     const originalFilename = fi.files[0].name;
     const fd = requestBodyForSelectedFile(fi);
@@ -191,7 +173,7 @@ async function compressFile() {
         }
 
         const stats = statsFromResponseHeaders(res.headers);
-        const blob = await res.blob();
+        const blob  = await res.blob();
         triggerBlobDownload(blob, originalFilename + ".z");
 
         clearMsgs();
@@ -201,16 +183,12 @@ async function compressFile() {
         showResults();
         showErr("Could not reach the server. Is it running on port 3000?");
     } finally {
-        setActionButtonState(
-            "compressBtn",
-            false,
+        setActionButtonState("compressBtn", false,
             '<span class="btn-icon">⏳</span> Compressing...',
-            '<span class="btn-icon">🗜️</span> Compress'
-        );
+            '<span class="btn-icon">🗜️</span> Compress');
     }
 }
 
-// Decompress button handler.
 async function decompressFile() {
     const fi = getById("fileInput");
     if (!fi.files.length) {
@@ -218,12 +196,9 @@ async function decompressFile() {
         return;
     }
 
-    setActionButtonState(
-        "decompressBtn",
-        true,
+    setActionButtonState("decompressBtn", true,
         '<span class="btn-icon">⏳</span> Decompressing...',
-        '<span class="btn-icon">📂</span> Decompress'
-    );
+        '<span class="btn-icon">📂</span> Decompress');
 
     const fd = requestBodyForSelectedFile(fi);
 
@@ -242,6 +217,7 @@ async function decompressFile() {
         const fallbackName = fi.files[0].name.endsWith(".z")
             ? fi.files[0].name.slice(0, -2)
             : fi.files[0].name;
+
         const downloadName = parseDownloadNameFromDisposition(
             res.headers && res.headers.get ? res.headers.get("Content-Disposition") : null,
             fallbackName
@@ -258,11 +234,8 @@ async function decompressFile() {
         showResults();
         showErr("Could not reach the server. Is it running on port 3000?");
     } finally {
-        setActionButtonState(
-            "decompressBtn",
-            false,
+        setActionButtonState("decompressBtn", false,
             '<span class="btn-icon">⏳</span> Decompressing...',
-            '<span class="btn-icon">📂</span> Decompress'
-        );
+            '<span class="btn-icon">📂</span> Decompress');
     }
 }

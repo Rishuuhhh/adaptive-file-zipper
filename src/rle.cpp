@@ -3,55 +3,47 @@
 
 using namespace std;
 
-namespace {
-
-void appendRunRecord(string &compressed, char symbol, int runLength) {
-    compressed.push_back(symbol);
-    compressed.push_back(static_cast<char>((runLength >> 8) & 0xFF));
-    compressed.push_back(static_cast<char>(runLength & 0xFF));
-}
-
-} // namespace
-
-string rleCompress(const string &inputData) {
-    if (inputData.empty()) return "";
+string rleCompress(const string &input) {
+    if (input.empty()) return "";
 
     string compressed;
-    int runStart = 0;
-    int inputSize = static_cast<int>(inputData.size());
+    int i = 0;
 
-    while (runStart < inputSize) {
-        char currentSymbol = inputData[runStart];
-        int cursor = runStart + 1;
+    while (i < (int)input.size()) {
+        char currentChar = input[i];
+        int runLength = 1;
 
-        while (cursor < inputSize && inputData[cursor] == currentSymbol
-               && (cursor - runStart) < MAX_RUN_LENGTH) {
-            cursor++;
+        while (i + runLength < (int)input.size()
+               && input[i + runLength] == currentChar
+               && runLength < MAX_RUN_LENGTH) {
+            runLength++;
         }
 
-        int runLength = cursor - runStart;
-        appendRunRecord(compressed, currentSymbol, runLength);
-        runStart = cursor;
+        compressed.push_back(currentChar);
+        compressed.push_back(static_cast<char>((runLength >> 8) & 0xFF));
+        compressed.push_back(static_cast<char>(runLength & 0xFF));
+
+        i += runLength;
     }
 
     return compressed;
 }
 
-string rleDecompress(const string &encodedData) {
-    if (encodedData.empty()) return "";
+string rleDecompress(const string &compressed) {
+    if (compressed.empty()) return "";
 
-    // Guard against malformed inputs; valid RLE payload is always 3-byte tuples.
-    if (encodedData.size() % 3 != 0) {
+    if (compressed.size() % 3 != 0) {
         return "";
     }
 
     string result;
-    int encodedSize = static_cast<int>(encodedData.size());
 
-    for (int i = 0; i + 2 < encodedSize; i += 3) {
-        char symbol = encodedData[i];
-        int runLength = (static_cast<unsigned char>(encodedData[i + 1]) << 8)
-                        | static_cast<unsigned char>(encodedData[i + 2]);
+    for (int i = 0; i + 2 < (int)compressed.size(); i += 3) {
+        char symbol = compressed[i];
+        int high = static_cast<unsigned char>(compressed[i + 1]);
+        int low  = static_cast<unsigned char>(compressed[i + 2]);
+        int runLength = (high << 8) | low;
+
         result.append(runLength, symbol);
     }
 

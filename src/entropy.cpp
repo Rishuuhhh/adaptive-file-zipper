@@ -1,27 +1,22 @@
 #include "entropy.h"
-#include <unordered_map>
 #include <cmath>
+#include <unordered_map>
 
 using namespace std;
 
-static unordered_map<unsigned char, int> buildFrequencyTable(const string &inputData) {
-    unordered_map<unsigned char, int> frequencies;
-    for (unsigned char byteValue : inputData) {
-        frequencies[byteValue]++;
+double calculateEntropy(const string &fileBytes) {
+    if (fileBytes.empty()) return 0.0;
+
+    unordered_map<unsigned char, int> freq;
+    for (unsigned char b : fileBytes) {
+        freq[b]++;
     }
-    return frequencies;
-}
-
-double calculateEntropy(const string &inputData) {
-    if (inputData.empty()) return 0.0;
-
-    unordered_map<unsigned char, int> frequencies = buildFrequencyTable(inputData);
 
     double entropy = 0.0;
-    double totalSymbols = static_cast<double>(inputData.size());
+    double totalBytes = static_cast<double>(fileBytes.size());
 
-    for (const auto &entry : frequencies) {
-        double probability = static_cast<double>(entry.second) / totalSymbols;
+    for (auto &pair : freq) {
+        double probability = pair.second / totalBytes;
         entropy -= probability * log2(probability);
     }
 

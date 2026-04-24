@@ -6,80 +6,6 @@
 
 using namespace std;
 
-namespace {
-
-int findNextLineBreak(const string &input, int position, const string &fieldName) {
-    int newlinePos = static_cast<int>(input.find('\n', position));
-    if (newlinePos == static_cast<int>(string::npos)) {
-        throw runtime_error("Malformed Serialized_Blob: missing " + fieldName + " newline");
-    }
-    return newlinePos;
-}
-
-string readHeaderLine(const string &input, int &position, const string &fieldName) {
-    int newlinePos = findNextLineBreak(input, position, fieldName);
-    string value = input.substr(position, newlinePos - position);
-    position = newlinePos + 1;
-    return value;
-}
-
-double parseEntropyValue(const string &entropyString) {
-    if (entropyString.empty()) {
-        throw runtime_error("Malformed Serialized_Blob: entropy field is empty");
-    }
-
-    try {
-        return stod(entropyString);
-    } catch (const exception &) {
-        throw runtime_error(
-            "Malformed Serialized_Blob: entropy field is not a valid number: \""
-            + entropyString + "\""
-        );
-    }
-}
-
-int parseCodeMapLength(const string &lengthString) {
-    if (lengthString.empty()) {
-        throw runtime_error("Malformed Serialized_Blob: codeMapLength field is empty");
-    }
-
-    try {
-        int parsedLength = stoi(lengthString);
-        if (parsedLength < 0) {
-            throw runtime_error("Malformed Serialized_Blob: codeMapLength is negative");
-        }
-        return parsedLength;
-    } catch (const runtime_error &) {
-        throw;
-    } catch (const exception &) {
-        throw runtime_error(
-            "Malformed Serialized_Blob: codeMapLength field is not a valid integer: \""
-            + lengthString + "\""
-        );
-    }
-}
-
-string sanitizeFilenameForHeader(const string &originalFilename) {
-    string safeName = originalFilename;
-
-    // Keep only basename so extraction never recreates a path outside result dir.
-    auto lastSlash = safeName.find_last_of("/\\");
-    if (lastSlash != string::npos) {
-        safeName = safeName.substr(lastSlash + 1);
-    }
-
-    // Trim leading dots to avoid accidental hidden/relative names.
-    while (!safeName.empty() && safeName[0] == '.') {
-        safeName.erase(safeName.begin());
-    }
-
-    // Newlines would break our one-line header format.
-    safeName.erase(remove(safeName.begin(), safeName.end(), '\n'), safeName.end());
-    return safeName;
-}
-
-} // namespace
-
 string readFile(const string &filename) {
     ifstream file(filename, ios::binary);
     if (!file.is_open()) {
@@ -91,55 +17,52 @@ string readFile(const string &filename) {
     return buffer.str();
 }
 
-void writeFile(const string &filename, const string &data) {
+void writeFile(const string &filename, const string &content) {
     ofstream file(filename, ios::binary);
     if (!file.is_open()) {
         throw runtime_error("Could not open file for writing: " + filename);
     }
 
-    file << data;
-    if (!file.good()) {
-        throw runtime_error("Failed while writing file: " + filename);
-    }
+    file << content;
 }
 
 string serializeCodeMap(const unordered_map<string, string> &codeMap) {
     string result;
     for (const auto &entry : codeMap) {
-        int keyLength = (int)entry.first.size();
-        int valueLength = (int)entry.second.size();
-        result += to_string(keyLength) + ":" + entry.first + " "
-                + to_string(valueLength) + ":" + entry.second + "\n";
+        result += to_string(entry.first.size()) + ":" + entry.first + " ";
+        result += to_string(entry.second.size()) + ":" + entry.second + "\n";
     }
     return result;
 }
 
 unordered_map<string, string> deserializeCodeMap(const string &serialized) {
     unordered_map<string, string> codeMap;
-    int position = 0;
-    int n = (int)serialized.size();
+    int pos = 0;
+    int total = (int)serialized.size();
 
-    while (position < n) {
-        int colonPos = (int)serialized.find(':', position);
-        if (colonPos == (int)string::npos) break;
-        int keyLength = stoi(serialized.substr(position, colonPos - position));
-        position = colonPos + 1;
+    while (pos < total) {
+        int colon = (int)serialized.find(':', pos);
+        if (colon == (int)string::npos) break;
 
-        string key = serialized.substr(position, keyLength);
-        position += keyLength;
+        int keyLen = stoi(serialized.substr(pos, colon - pos));
+        pos = colon + 1;
 
-        if (position >= n || serialized[position] != ' ') break;
-        position++;
+        string key = serialized.substr(pos, keyLen);
+        pos += keyLen;
 
-        colonPos = (int)serialized.find(':', position);
-        if (colonPos == (int)string::npos) break;
-        int valueLength = stoi(serialized.substr(position, colonPos - position));
-        position = colonPos + 1;
+        if (pos >= total || serialized[pos] != ' ') break;
+        pos++;
 
-        string value = serialized.substr(position, valueLength);
-        position += valueLength;
+        colon = (int)serialized.find(':', pos);
+        if (colon == (int)string::npos) break;
 
-        if (position < n && serialized[position] == '\n') position++;
+        int valLen = stoi(serialized.substr(pos, colon - pos));
+        pos = colon + 1;
+
+        string value = serialized.substr(pos, valLen);
+        pos += valLen;
+
+        if (pos < total && serialized[pos] == '\n') pos++;
 
         codeMap[key] = value;
     }
@@ -147,56 +70,91 @@ unordered_map<string, string> deserializeCodeMap(const string &serialized) {
     return codeMap;
 }
 
+static string sanitizeFilename(const string &name) {
+    string safe = name;
+
+    size_t lastSlash = safe.find_last_of("/\\");
+    if (lastSlash != string::npos) {
+        safe = safe.substr(lastSlash + 1);
+    }
+
+    while (!safe.empty() && safe[0] == '.') {
+        safe.erase(safe.begin());
+    }
+
+    safe.erase(remove(safe.begin(), safe.end(), '\n'), safe.end());
+
+    return safe;
+}
+
 string serializeCompressedData(const string &method, double entropy,
-                              const string &serializedCodeMap,
-                              const string &payload,
-                              const string &originalFilename) {
-    string safeName = sanitizeFilenameForHeader(originalFilename);
+                               const string &codeMapData,
+                               const string &payload,
+                               const string &originalFilename) {
+    string safeName = sanitizeFilename(originalFilename);
 
     return method + "\n"
          + to_string(entropy) + "\n"
-         + to_string((int)serializedCodeMap.size()) + "\n"
+         + to_string((int)codeMapData.size()) + "\n"
          + safeName + "\n"
-         + serializedCodeMap
+         + codeMapData
          + payload;
 }
 
-void deserializeCompressedData(const string &input, string &method,
-                              double &entropy, string &serializedCodeMap,
-                              string &payload, string &originalFilename) {
-    int position = 0;
-    int inputSize = static_cast<int>(input.size());
+void deserializeCompressedData(const string &blob, string &method,
+                               double &entropy, string &codeMapData,
+                               string &payload, string &originalFilename) {
+    int pos = 0;
+    int blobSize = (int)blob.size();
 
-    method = readHeaderLine(input, position, "method tag");
-    entropy = parseEntropyValue(readHeaderLine(input, position, "entropy"));
-    int codeMapLength = parseCodeMapLength(readHeaderLine(input, position, "codeMapLength"));
-
-    // Try to read the 4th header line as originalFilename (new format).
-    // If consuming it still leaves enough bytes for the codeMap, use it.
-    // Otherwise treat originalFilename as "" and stay at current position (old format).
-    originalFilename = "";
-    int posAfterFilename = position;
-    int filenameNewline = static_cast<int>(input.find('\n', position));
-    if (filenameNewline != static_cast<int>(string::npos)) {
-        int posCandidate = filenameNewline + 1;
-        // Check that the codeMap would fit after this candidate position
-        if (posCandidate + codeMapLength <= inputSize) {
-            originalFilename = input.substr(position, filenameNewline - position);
-            posAfterFilename = posCandidate;
+    auto readLine = [&](const string &fieldName) -> string {
+        int nl = (int)blob.find('\n', pos);
+        if (nl == (int)string::npos) {
+            throw runtime_error("Malformed .z file: missing " + fieldName);
         }
-        // else: old 3-line format — leave originalFilename="" and posAfterFilename=position
-    }
-    position = posAfterFilename;
+        string line = blob.substr(pos, nl - pos);
+        pos = nl + 1;
+        return line;
+    };
 
-    // Verify the code map region is within bounds before slicing
-    if (position + codeMapLength > inputSize) {
-        throw runtime_error("Malformed Serialized_Blob: codeMapLength (" +
-                            to_string(codeMapLength) +
-                            ") extends beyond end of input (available: " +
-                            to_string(inputSize - position) + " bytes)");
+    method = readLine("method tag");
+
+    string entropyStr = readLine("entropy");
+    if (entropyStr.empty()) {
+        throw runtime_error("Malformed .z file: entropy field is empty");
+    }
+    try {
+        entropy = stod(entropyStr);
+    } catch (...) {
+        throw runtime_error("Malformed .z file: entropy is not a number: " + entropyStr);
     }
 
-    serializedCodeMap = input.substr(position, codeMapLength);
-    position += codeMapLength;
-    payload = input.substr(position);
+    string codeMapLenStr = readLine("codeMapLength");
+    int codeMapLen = 0;
+    try {
+        codeMapLen = stoi(codeMapLenStr);
+    } catch (...) {
+        throw runtime_error("Malformed .z file: codeMapLength is not a number");
+    }
+    if (codeMapLen < 0) {
+        throw runtime_error("Malformed .z file: codeMapLength is negative");
+    }
+
+    originalFilename = "";
+    int filenameNewline = (int)blob.find('\n', pos);
+    if (filenameNewline != (int)string::npos) {
+        int afterFilename = filenameNewline + 1;
+        if (afterFilename + codeMapLen <= blobSize) {
+            originalFilename = blob.substr(pos, filenameNewline - pos);
+            pos = afterFilename;
+        }
+    }
+
+    if (pos + codeMapLen > blobSize) {
+        throw runtime_error("Malformed .z file: code map extends past end of file");
+    }
+    codeMapData = blob.substr(pos, codeMapLen);
+    pos += codeMapLen;
+
+    payload = blob.substr(pos);
 }
