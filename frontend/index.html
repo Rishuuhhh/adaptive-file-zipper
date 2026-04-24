@@ -3,84 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Adaptive File Zipper</title>
+    <title>File Zipper</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <div class="logo">🌸</div>
-            <h1>File Zipper</h1>
-            <p class="subtitle">picks the best compression for your file ✨</p>
-        </header>
 
-        <div class="card upload-card">
-            <div class="drop-zone" id="dropZone">
-                <div class="drop-icon">🗂️</div>
-                <p class="drop-text">drop a file here or <label for="fileInput" class="browse-link">browse</label></p>
-                <p class="drop-hint">any file type works!</p>
-                <input type="file" id="fileInput">
-            </div>
-            <div class="selected-file hidden" id="selectedFile">
-                <span class="file-icon">📄</span>
-                <span id="fileName">no file selected</span>
-            </div>
+<div class="container">
+    <h1>File Zipper</h1>
+    <p class="subtitle">Compress and decompress files using adaptive encoding</p>
 
-            <div class="actions">
-                <button id="compressBtn" onclick="compressFile()" class="btn btn-primary">
-                    <span class="btn-icon">🗜️</span> Compress
-                </button>
-                <button id="decompressBtn" onclick="decompressFile()" class="btn btn-secondary">
-                    <span class="btn-icon">📂</span> Decompress
-                </button>
-            </div>
-        </div>
+    <div class="box">
+        <input type="file" id="fileInput">
+        <label for="fileInput" class="file-label" id="fileLabel">Choose a file</label>
+        <p id="fileName" class="file-name"></p>
 
-        <div id="results" class="hidden">
-            <p id="error" class="hidden alert alert-error"></p>
-            <p id="status" class="hidden alert alert-success"></p>
-
-            <div id="stats" class="hidden">
-                <div class="stats-grid">
-                    <div class="stat-card card-purple">
-                        <div class="stat-label">Method</div>
-                        <div class="stat-value method-badge" id="method">—</div>
-                    </div>
-                    <div class="stat-card card-pink">
-                        <div class="stat-label">Entropy</div>
-                        <div class="stat-value" id="entropy">—</div>
-                        <div class="stat-hint">low = repetitive · high = random</div>
-                    </div>
-                    <div class="stat-card card-mint">
-                        <div class="stat-label">Adaptive Ratio</div>
-                        <div class="stat-value highlight" id="adaptive">—</div>
-                        <div class="stat-hint">compressed / original size</div>
-                    </div>
-                    <div class="stat-card card-blue">
-                        <div class="stat-label">Huffman Ratio</div>
-                        <div class="stat-value" id="huffman">—</div>
-                        <div class="stat-hint">standard huffman baseline</div>
-                    </div>
-                    <div class="stat-card card-peach">
-                        <div class="stat-label">Time</div>
-                        <div class="stat-value" id="time">—</div>
-                    </div>
-                    <div class="stat-card card-mint" id="sizeCard">
-                        <div class="stat-label">File Size</div>
-                        <div class="stat-value" id="originalSizeDisplay">—</div>
-                        <span class="stat-hint" id="compressedSizeDisplay">—</span>
-                        <span class="stat-value highlight" id="sizeReduction">—</span>
-                    </div>
-                </div>
-
-                <a id="downloadLink" class="hidden btn btn-download" target="_blank">
-                    <span>⬇️</span> Download Compressed File
-                </a>
-            </div>
+        <div class="btn-row">
+            <button id="compressBtn" onclick="compressFile()">Compress</button>
+            <button id="decompressBtn" onclick="decompressFile()">Decompress</button>
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <p id="error" class="msg error hidden"></p>
+    <p id="status" class="msg success hidden"></p>
+
+    <div id="result" class="hidden">
+        <a id="downloadBtn" class="download-btn" download>Download File</a>
+    </div>
+
+    <div id="stats" class="hidden">
+        <table>
+            <tr><td>Method</td><td id="method">—</td></tr>
+            <tr><td>Entropy</td><td id="entropy">—</td></tr>
+            <tr><td>Original Size</td><td id="origSize">—</td></tr>
+            <tr><td>Compressed Size</td><td id="compSize">—</td></tr>
+            <tr><td>Reduction</td><td id="reduction">—</td></tr>
+            <tr><td>Time</td><td id="time">—</td></tr>
+        </table>
+        <p id="noneNote" class="hidden note">Note: File could not be compressed further (already compressed or random data).</p>
+    </div>
+
+</div>
+
+<script src="script.js"></script>
 </body>
 </html>
