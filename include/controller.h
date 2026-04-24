@@ -5,10 +5,10 @@
 
 struct CompressionResult {
     std::string method;
-    double entropy;          // measured entropy of original input
-    double adaptiveRatio;    // chosenPayloadSize / originalSize
-    double huffmanRatio;     // entropy-based estimated lower bound
-    double timeTaken;        // end-to-end compression time (ms)
+    double entropy;
+    double adaptiveRatio;
+    double huffmanRatio;
+    double timeTaken;
     std::string compressedData;
     std::string originalFilename;
 };
