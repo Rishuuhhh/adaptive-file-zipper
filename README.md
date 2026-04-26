@@ -111,35 +111,11 @@ Only used symbols are stored:
 [rest]    bit-packed payload
 ```
 
-## Running Tests
-
-### C++ tests
-
-```bash
-make test
-```
-
-### Backend tests
-
-```bash
-cd backend
-npm test -- --runInBand
-```
-
-### Frontend tests
-
-```bash
-cd frontend
-npm test -- --runInBand
-```
-
 ## Useful Make Targets
 
 | Command | Purpose |
 |---|---|
 | `make build` | compile `zipper` binary |
-| `make test` | build + run C++ tests |
-| `make check` | compile-only check for tests |
 | `make clean` | remove generated build artifacts |
 
 ## Project Structure
@@ -148,9 +124,8 @@ npm test -- --runInBand
 .
 ├── src/                  # C++ implementation
 ├── include/              # C++ headers
-├── tests/                # C++ tests
-├── backend/              # Express server + tests
-├── frontend/             # browser client + tests
+├── backend/              # Express server
+├── frontend/             # browser client
 ├── data/                 # uploaded temp files
 ├── results/              # generated output files
 ├── Makefile

@@ -2,24 +2,17 @@
 #include <fstream>
 #include <sstream>
 #include <iomanip>
-
 using namespace std;
-
-// Read a file in binary mode.
 string readFile(const string &fn) {
     ifstream f(fn, ios::binary);
     stringstream buf;
     buf << f.rdbuf();
     return buf.str();
 }
-
-// Write a file in binary mode.
 void writeFile(const string &fn, const string &d) {
     ofstream f(fn, ios::binary);
     f << d;
 }
-
-// Serialize codeMap to a text representation.
 string serializeCodeMap(const unordered_map<string, string> &cm) {
     string res;
     for (auto &e : cm) {
@@ -30,12 +23,9 @@ string serializeCodeMap(const unordered_map<string, string> &cm) {
     }
     return res;
 }
-
-// Rebuild codeMap from serialized text.
 unordered_map<string, string> deserializeCodeMap(const string &s) {
     unordered_map<string, string> cm;
     size_t pos = 0, n = s.size();
-
     while (pos < n) {
         size_t cl = s.find(':', pos);
         if (cl == string::npos) break;
@@ -43,59 +33,49 @@ unordered_map<string, string> deserializeCodeMap(const string &s) {
         int kl = stoi(s.substr(pos, cl - pos));
         if (kl < 0) break;
         pos = cl + 1;
-        if (pos + kl > n) break;  // Bounds check before substr
+        if (pos + kl > n) break;
         string k = s.substr(pos, kl);
         pos += kl;
-
         if (pos >= n || s[pos] != ' ') break;
         pos++;
-
         cl = s.find(':', pos);
         if (cl == string::npos) break;
         if (cl >= n) break;
         int vl = stoi(s.substr(pos, cl - pos));
         if (vl < 0) break;
         pos = cl + 1;
-        if (pos + vl > n) break;  // Bounds check before substr
+        if (pos + vl > n) break;
         string v = s.substr(pos, vl);
         pos += vl;
-
         if (pos < n && s[pos] == '\n') pos++;
         cm[k] = v;
     }
     return cm;
 }
-
-// Pack compressed payload with metadata header.
 string packData(const string &meth, double ent,
                 const string &cms, const string &pay) {
     ostringstream oss;
-    oss << setprecision(17) << ent;  // Full double precision
+    oss << setprecision(17) << ent;
     return meth + "\n"
          + oss.str() + "\n"
          + to_string((int)cms.size()) + "\n"
          + cms
          + pay;
 }
-
-// Unpack method, entropy, codemap, and payload from packed data.
 void unpackData(const string &in, string &meth, double &ent,
                 string &cms, string &pay) {
     size_t pos = 0, n = in.size();
-
     size_t nl = in.find('\n', pos);
     if (nl == string::npos) return;
     meth = in.substr(pos, nl - pos);
     pos = nl + 1;
     if (pos > n) return;
-
     nl = in.find('\n', pos);
     if (nl == string::npos) return;
     if (nl >= n) return;
     ent = stod(in.substr(pos, nl - pos));
     pos = nl + 1;
     if (pos > n) return;
-
     nl = in.find('\n', pos);
     if (nl == string::npos) return;
     if (nl >= n) return;
@@ -103,10 +83,13 @@ void unpackData(const string &in, string &meth, double &ent,
     if (cml < 0) return;
     pos = nl + 1;
     if (pos > n) return;
-
-    if (pos + (size_t)cml > n) return;  // Bounds check before substr
+    if (pos + (size_t)cml > n) return;
     cms = in.substr(pos, cml);
     pos += cml;
-
     pay = in.substr(pos);
+}
+void deserializeCompressedData(const string &input, string &method, double &entropy,
+                              string &codeMapData, string &payload) {
+    string ignored;
+    deserializeCompressedData(input, method, entropy, codeMapData, payload, ignored);
 }

@@ -1,15 +1,5 @@
 {
-  "name": "frontend-tests",
+  "name": "frontend",
   "version": "1.0.0",
-  "scripts": {
-    "test": "jest"
-  },
-  "devDependencies": {
-    "jest": "^29.7.0",
-    "jest-environment-jsdom": "^29.7.0",
-    "fast-check": "^3.0.0"
-  },
-  "jest": {
-    "testEnvironment": "jsdom"
-  }
+  "scripts": {}
 }

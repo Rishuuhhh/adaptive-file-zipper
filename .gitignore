@@ -42,7 +42,6 @@
 
 # Local/editor metadata
 .DS_Store
-.kiro/
 
 # Generated runtime artifacts
 data/[0-9]*_*.txt
