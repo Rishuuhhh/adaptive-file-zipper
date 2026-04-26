@@ -3,38 +3,49 @@
 
 using namespace std;
 
-// Store each run as [char][count_hi][count_lo] (max run length: 65535).
+string rleCompress(const string &input) {
+    if (input.empty()) return "";
 
-string rleCompress(const string &d) {
-    if (d.empty()) return "";
+    string compressed;
+    int i = 0;
 
-    string out;
-    int i = 0, n = (int)d.size();
+    while (i < (int)input.size()) {
+        char currentChar = input[i];
+        int runLength = 1;
 
-    while (i < n) {
-        char c = d[i];
-        int j = i + 1;
-        // Count how many times this character repeats consecutively.
-        while (j < n && d[j] == c && (j - i) < 65535) j++;
-        int cnt = j - i;
-        out.push_back(c);
-        out.push_back((char)((cnt >> 8) & 0xFF)); // High byte of count.
-        out.push_back((char)(cnt & 0xFF));        // Low byte of count.
-        i = j;
+        while (i + runLength < (int)input.size()
+               && input[i + runLength] == currentChar
+               && runLength < MAX_RUN_LENGTH) {
+            runLength++;
+        }
+
+        compressed.push_back(currentChar);
+        compressed.push_back(static_cast<char>((runLength >> 8) & 0xFF));
+        compressed.push_back(static_cast<char>(runLength & 0xFF));
+
+        i += runLength;
     }
-    return out;
+
+    return compressed;
 }
 
-string rleDecompress(const string &d) {
-    if (d.empty()) return "";
+string rleDecompress(const string &compressed) {
+    if (compressed.empty()) return "";
 
-    string res;
-    int n = (int)d.size();
-
-    for (int i = 0; i + 2 < n; i += 3) {
-        char c   = d[i];
-        int cnt  = ((unsigned char)d[i+1] << 8) | (unsigned char)d[i+2];
-        res.append(cnt, c);
+    if (compressed.size() % 3 != 0) {
+        return "";
     }
-    return res;
+
+    string result;
+
+    for (int i = 0; i + 2 < (int)compressed.size(); i += 3) {
+        char symbol = compressed[i];
+        int high = static_cast<unsigned char>(compressed[i + 1]);
+        int low  = static_cast<unsigned char>(compressed[i + 2]);
+        int runLength = (high << 8) | low;
+
+        result.append(runLength, symbol);
+    }
+
+    return result;
 }

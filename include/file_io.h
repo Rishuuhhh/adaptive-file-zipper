@@ -3,17 +3,29 @@
 
 #include <string>
 #include <unordered_map>
+using namespace std;
+ string readFile(const  string &filename);
+void writeFile(const  string &filename, const  string &data);
 
-std::string readFile(const std::string &filename);
-void writeFile(const std::string &filename, const std::string &data);
+ string serializeCodeMap(const  unordered_map< string,  string> &codeMap);
+ unordered_map< string,  string> deserializeCodeMap(const  string &serialized);
 
-std::string serializeCodeMap(const std::unordered_map<std::string, std::string> &codeMap);
-std::unordered_map<std::string, std::string> deserializeCodeMap(const std::string &serialized);
+ string serializeCompressedData(const  string &method, double entropy, const  string &codeMapData, const  string &payload, const  string &originalFilename = "");
 
-std::string packData(const std::string &method, double entropy,
-                     const std::string &codeMapSerialized, const std::string &payload);
+void deserializeCompressedData(const  string &input,  string &method, double &entropy,  string &codeMapData, string &payload,  string &originalFilename);
 
-void unpackData(const std::string &input, std::string &method, double &entropy,
-                std::string &codeMapSerialized, std::string &payload);
+inline void deserializeCompressedData(const  string &input,  string &method, double &entropy,  string &codeMapData, string &payload) {
+     string ignored;
+    deserializeCompressedData(input, method, entropy, codeMapData, payload, ignored);
+}
+
+inline  string packData(const  string &method, double entropy, const  string &codeMapData, const  string &payload) {
+    return serializeCompressedData(method, entropy, codeMapData, payload, "");
+}
+
+inline void unpackData(const  string &input,  string &method, double &entropy,  string &codeMapData, string &payload) {
+    string ignored;
+    deserializeCompressedData(input, method, entropy, codeMapData, payload, ignored);
+}
 
 #endif

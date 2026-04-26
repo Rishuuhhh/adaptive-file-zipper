@@ -1,158 +1,155 @@
-const API = "";
-
-// Number-format helper functions.
-function fmtEnt(v)  { return `${Number(v).toFixed(4)} bits/char`; }
-function fmtRat(v)  { return `${(Number(v) * 100).toFixed(1)}%`; }
-function fmtTime(v) { return `${Number(v).toFixed(2)} ms`; }
-
-// Show error message and hide unrelated sections.
-function showErr(msg) {
-    const el = document.getElementById("error");
-    el.innerText = msg;
-    el.classList.remove("hidden");
-    document.getElementById("status").classList.add("hidden");
-    document.getElementById("stats").classList.add("hidden");
+function el(id) {
+    return document.getElementById(id);
 }
 
-// Show status message.
+function formatSize(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / 1048576).toFixed(2) + " MB";
+}
+
+function formatEntropy(v) { return Number(v).toFixed(4) + " bits/char"; }
+function formatRatio(v)   { return (Number(v) * 100).toFixed(1) + "%"; }
+function formatTime(v)    { return Number(v).toFixed(2) + " ms"; }
+
+el("fileInput").addEventListener("change", function() {
+    if (this.files[0]) {
+        el("fileName").innerText = this.files[0].name;
+        el("fileLabel").innerText = "Change file";
+    }
+});
+
+function showError(msg) {
+    el("error").innerText = msg;
+    el("error").classList.remove("hidden");
+    el("status").classList.add("hidden");
+}
+
 function showStatus(msg) {
-    const el = document.getElementById("status");
-    el.innerText = msg;
-    el.classList.remove("hidden");
-    document.getElementById("error").classList.add("hidden");
+    el("status").innerText = msg;
+    el("status").classList.remove("hidden");
+    el("error").classList.add("hidden");
 }
 
-// Hide status and error messages.
-function clearMsgs() {
-    document.getElementById("error").classList.add("hidden");
-    document.getElementById("status").classList.add("hidden");
+function clearMessages() {
+    el("error").classList.add("hidden");
+    el("status").classList.add("hidden");
 }
 
-function showResults() {
-    document.getElementById("results").classList.remove("hidden");
-}
-
-// Handle file selection and drag-drop input.
-document.getElementById("fileInput").addEventListener("change", function () {
-    setFile(this.files[0]);
-});
-
-const dz = document.getElementById("dropZone");
-
-dz.addEventListener("click", () => document.getElementById("fileInput").click());
-
-dz.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    dz.classList.add("drag-over");
-});
-
-dz.addEventListener("dragleave", () => dz.classList.remove("drag-over"));
-
-dz.addEventListener("drop", (e) => {
-    e.preventDefault();
-    dz.classList.remove("drag-over");
-    const f = e.dataTransfer.files[0];
-    if (f) {
-        const dt = new DataTransfer();
-        dt.items.add(f);
-        document.getElementById("fileInput").files = dt.files;
-        setFile(f);
-    }
-});
-
-function setFile(f) {
-    if (!f) return;
-    document.getElementById("fileName").innerText = f.name;
-    document.getElementById("selectedFile").classList.remove("hidden");
-}
-
-// Compress button handler.
 async function compressFile() {
-    const fi = document.getElementById("fileInput");
-    if (!fi.files.length) { alert("Please select a file first"); return; }
-
-    const btn = document.getElementById("compressBtn");
-    btn.disabled = true;
-    btn.innerHTML = '<span class="btn-icon">⏳</span> Compressing...';
-
-    const fd = new FormData();
-    fd.append("file", fi.files[0]);
-
-    try {
-        const res  = await fetch('/compress', { method: "POST", body: fd });
-        const data = await res.json();
-
-        showResults();
-
-        if (!res.ok) { showErr(data.error || "Compression failed"); return; }
-
-        clearMsgs();
-
-        document.getElementById("entropy").innerText  = fmtEnt(data.entropy);
-        document.getElementById("method").innerText   = data.adaptiveMethod;
-        document.getElementById("adaptive").innerText = fmtRat(data.adaptiveRatio);
-        document.getElementById("huffman").innerText  = fmtRat(data.huffmanRatio);
-        document.getElementById("time").innerText     = fmtTime(data.time);
-
-        document.getElementById("stats").classList.remove("hidden");
-
-        const lnk = document.getElementById("downloadLink");
-        lnk.href = data.download;
-        lnk.classList.remove("hidden");
-
-    } catch (e) {
-        showResults();
-        showErr("Could not reach the server. Is it running on port 3000?");
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span class="btn-icon">🗜️</span> Compress';
+    var fileInput = el("fileInput");
+    if (!fileInput.files.length) {
+        alert("Please select a file first.");
+        return;
     }
-}
 
-// Decompress button handler.
-async function decompressFile() {
-    const fi = document.getElementById("fileInput");
-    if (!fi.files.length) { alert("Please select a file first"); return; }
-
-    const btn = document.getElementById("decompressBtn");
+    var btn = el("compressBtn");
     btn.disabled = true;
-    btn.innerHTML = '<span class="btn-icon">⏳</span> Decompressing...';
+    btn.innerText = "Compressing...";
 
-    const fd = new FormData();
-    fd.append("file", fi.files[0]);
+    var filename = fileInput.files[0].name;
+    var fd = new FormData();
+    fd.append("file", fileInput.files[0]);
 
     try {
-        const res = await fetch('/decompress', { method: "POST", body: fd });
-
-        showResults();
+        var res = await fetch("/compress", { method: "POST", body: fd });
 
         if (!res.ok) {
-            let msg = "Decompression failed";
-            try { msg = (await res.json()).error || msg; } catch (_) {}
-            showErr(msg);
+            var errData = await res.json().catch(function() { return {}; });
+            showError(errData.error || "Compression failed.");
             return;
         }
 
-        const blob = await res.blob();
-        const url  = window.URL.createObjectURL(blob);
-        const a    = document.createElement("a");
-        a.href     = url;
-        a.download = "output.txt";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+        var statsHeader = res.headers.get("X-Compression-Stats");
+        var stats = statsHeader ? JSON.parse(statsHeader) : {};
 
-        clearMsgs();
-        document.getElementById("stats").classList.add("hidden");
-        document.getElementById("downloadLink").classList.add("hidden");
-        showStatus("Decompression done — file downloaded");
+        var blob = await res.blob();
+        var url = URL.createObjectURL(blob);
+
+        var downloadBtn = el("downloadBtn");
+        downloadBtn.href = url;
+        downloadBtn.download = filename + ".z";
+        downloadBtn.innerText = "Download " + filename + ".z";
+        el("result").classList.remove("hidden");
+
+        clearMessages();
+        showStats(stats);
 
     } catch (e) {
-        showResults();
-        showErr("Could not reach the server. Is it running on port 3000?");
+        showError("Could not connect to server.");
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<span class="btn-icon">📂</span> Decompress';
+        btn.innerText = "Compress";
     }
+}
+
+async function decompressFile() {
+    var fileInput = el("fileInput");
+    if (!fileInput.files.length) {
+        alert("Please select a file first.");
+        return;
+    }
+
+    var btn = el("decompressBtn");
+    btn.disabled = true;
+    btn.innerText = "Decompressing...";
+
+    var fd = new FormData();
+    fd.append("file", fileInput.files[0]);
+
+    try {
+        var res = await fetch("/decompress", { method: "POST", body: fd });
+
+        if (!res.ok) {
+            var errData = await res.json().catch(function() { return {}; });
+            showError(errData.detail || errData.error || "Decompression failed.");
+            return;
+        }
+
+        var blob = await res.blob();
+        var url = URL.createObjectURL(blob);
+
+        var disposition = res.headers.get("Content-Disposition") || "";
+        var match = disposition.match(/filename="?([^"]+)"?/);
+        var downloadName = match ? match[1] : fileInput.files[0].name.replace(/\.z$/i, "");
+
+        var downloadBtn = el("downloadBtn");
+        downloadBtn.href = url;
+        downloadBtn.download = downloadName;
+        downloadBtn.innerText = "Download " + downloadName;
+        el("result").classList.remove("hidden");
+
+        clearMessages();
+        el("stats").classList.add("hidden");
+        showStatus("Decompression complete.");
+
+    } catch (e) {
+        showError("Could not connect to server.");
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "Decompress";
+    }
+}
+
+function showStats(stats) {
+    el("method").innerText  = stats.adaptiveMethod || "—";
+    el("entropy").innerText = stats.entropy !== undefined ? formatEntropy(stats.entropy) : "—";
+    el("origSize").innerText = stats.originalSize !== undefined ? formatSize(stats.originalSize) : "—";
+    el("compSize").innerText = stats.compressedSize !== undefined ? formatSize(stats.compressedSize) : "—";
+    el("time").innerText    = stats.time !== undefined ? formatTime(stats.time) : "—";
+
+    if (stats.originalSize && stats.compressedSize) {
+        var saved = ((1 - stats.compressedSize / stats.originalSize) * 100).toFixed(1);
+        el("reduction").innerText = saved + "%";
+    } else {
+        el("reduction").innerText = "—";
+    }
+
+    if (stats.adaptiveMethod === "NONE") {
+        el("noneNote").classList.remove("hidden");
+    } else {
+        el("noneNote").classList.add("hidden");
+    }
+
+    el("stats").classList.remove("hidden");
 }

@@ -3,56 +3,92 @@
 
 #include <filesystem>
 #include <iostream>
+#include <stdexcept>
 
 using namespace std;
 
-// Usage: ./zipper compress input.txt output.z
-//        ./zipper decompress input.z output.txt
+static void printUsage() {
+    cerr << "\n";
+    cerr << "  Adaptive File Zipper\n";
+    cerr << "  --------------------\n";
+    cerr << "  Usage:\n";
+    cerr << "    ./zipper compress   <input_file>  <output_file.z>\n";
+    cerr << "    ./zipper decompress <input_file.z> <output_file>\n";
+    cerr << "\n";
+    cerr << "  Automatically picks the best method for each file.\n";
+    cerr << "\n";
+}
 
-int main(int argc, char *argv[]) {
-
-    if (argc < 4) {
-        cout << "Invalid arguments\n";
+static int compressFile(const string &inputPath, const string &outputPath) {
+    if (!filesystem::exists(inputPath)) {
+        cout << "{\"error\": \"Input file not found: " << inputPath << "\"}\n";
         return 1;
     }
 
-    string mode = argv[1];
-    string fin  = argv[2];
-    string fout = argv[3];
+    string fileContents = readFile(inputPath);
+    size_t originalSize = fileContents.size();
+    string originalFilename = filesystem::path(inputPath).filename().string();
 
-    if (mode == "compress") {
+    CompressionResult result = runAdaptiveCompression(fileContents, originalFilename);
+    writeFile(outputPath, result.compressedData);
 
-        if (!filesystem::exists(fin)) {
-            cout << "{\"error\": \"Could not read file\"}\n";
-            return 1;
-        }
-
-        string d = readFile(fin);
-        CompressionResult r = runAdaptiveCompression(d);
-        writeFile(fout, r.compressedData);
-
-        // Node.js backend parses this JSON output.
-        cout << "{\n";
-        cout << "\"entropy\": "        << r.entropy       << ",\n";
-        cout << "\"adaptiveMethod\": \"" << r.method      << "\",\n";
-        cout << "\"adaptiveRatio\": "  << r.adaptiveRatio << ",\n";
-        cout << "\"huffmanRatio\": "   << r.huffmanRatio  << ",\n";
-        cout << "\"time\": "           << r.timeTaken     << "\n";
-        cout << "}\n";
-
-    } else if (mode == "decompress") {
-
-        if (!filesystem::exists(fin)) {
-            cout << "{\"error\": \"Could not read file\"}\n";
-            return 1;
-        }
-
-        string pk  = readFile(fin);
-        string org = runDecompression(pk);
-        writeFile(fout, org);
-
-        cout << "{ \"status\": \"done\" }\n";
-    }
+    cout << "{\n";
+    cout << "  \"entropy\": "            << result.entropy               << ",\n";
+    cout << "  \"adaptiveMethod\": \""   << result.method                << "\",\n";
+    cout << "  \"adaptiveRatio\": "      << result.adaptiveRatio         << ",\n";
+    cout << "  \"huffmanRatio\": "       << result.huffmanRatio          << ",\n";
+    cout << "  \"time\": "               << result.timeTaken             << ",\n";
+    cout << "  \"originalSize\": "       << originalSize                 << ",\n";
+    cout << "  \"compressedSize\": "     << result.compressedData.size() << ",\n";
+    cout << "  \"originalFilename\": \"" << result.originalFilename      << "\"\n";
+    cout << "}\n";
 
     return 0;
+}
+
+static int decompressFile(const string &inputPath, const string &outputPath) {
+    if (!filesystem::exists(inputPath)) {
+        cout << "{\"error\": \"Input file not found: " << inputPath << "\"}\n";
+        return 1;
+    }
+
+    string blobContents = readFile(inputPath);
+
+    DecompressionResult result;
+    try {
+        result = runDecompression(blobContents);
+    } catch (const exception &ex) {
+        cout << "{\"error\": \"" << ex.what() << "\"}\n";
+        return 1;
+    }
+
+    writeFile(outputPath, result.data);
+
+    cout << "{\"status\": \"done\", \"originalFilename\": \""
+         << result.originalFilename << "\"}\n";
+
+    return 0;
+}
+
+int main(int argc, char *argv[]) {
+    if (argc < 4) {
+        printUsage();
+        return 1;
+    }
+
+    string mode       = argv[1];
+    string inputPath  = argv[2];
+    string outputPath = argv[3];
+
+    if (mode == "compress") {
+        return compressFile(inputPath, outputPath);
+    }
+
+    if (mode == "decompress") {
+        return decompressFile(inputPath, outputPath);
+    }
+
+    cerr << "Unknown mode: " << mode << "\n";
+    printUsage();
+    return 1;
 }

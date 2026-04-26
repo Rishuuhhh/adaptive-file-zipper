@@ -1,344 +1,391 @@
 #include "block_huffman.h"
+#include <algorithm>
 #include <queue>
 #include <vector>
-#include <algorithm>
 
 using namespace std;
 
-// Use global Huffman mode for inputs smaller than 4 KB.
-static const int SML_THRESH = 4 * 1024;
-// Block size used by block-split mode.
-static const int BLK_SZ = 32 * 1024;
+static const int SMALL_FILE_THRESHOLD = 4 * 1024;
+static const int BLOCK_SIZE           = 32 * 1024;
 
-// A single Huffman tree node.
-struct CNode {
-    int sym;  // -1 = internal, 0-255 = leaf byte
-    int frq;  // Symbol frequency
-    CNode *l, *r;
-    CNode(int s, int f) : sym(s), frq(f), l(0), r(0) {}
+struct TreeNode {
+    int symbol;
+    int frequency;
+    TreeNode *left;
+    TreeNode *right;
+
+    TreeNode(int sym, int freq) : symbol(sym), frequency(freq), left(nullptr), right(nullptr) {}
 };
 
-// Comparator for a min-heap by frequency.
-struct CNodeCmp {
-    bool operator()(CNode *a, CNode *b) const { return a->frq > b->frq; }
-};
-
-// Build Huffman tree from a frequency table.
-static CNode* buildTree(int fr[256]) {
-    priority_queue<CNode*, vector<CNode*>, CNodeCmp> pq;
-    for (int i = 0; i < 256; i++)
-        if (fr[i] > 0) pq.push(new CNode(i, fr[i]));
-    if (pq.empty()) return 0;
-    // Keep merging the two least-frequent nodes.
-    while ((int)pq.size() > 1) {
-        CNode *a = pq.top(); pq.pop();
-        CNode *b = pq.top(); pq.pop();
-        CNode *p = new CNode(-1, a->frq + b->frq);
-        p->l = a; p->r = b;
-        pq.push(p);
+struct CompareByFrequency {
+    bool operator()(TreeNode *a, TreeNode *b) const {
+        return a->frequency > b->frequency;
     }
-    return pq.top();
+};
+
+static TreeNode* buildHuffmanTree(int freq[256]) {
+    priority_queue<TreeNode*, vector<TreeNode*>, CompareByFrequency> heap;
+
+    for (int i = 0; i < 256; i++) {
+        if (freq[i] > 0) {
+            heap.push(new TreeNode(i, freq[i]));
+        }
+    }
+
+    if (heap.empty()) return nullptr;
+
+    while (heap.size() > 1) {
+        TreeNode *left  = heap.top(); heap.pop();
+        TreeNode *right = heap.top(); heap.pop();
+
+        TreeNode *parent = new TreeNode(-1, left->frequency + right->frequency);
+        parent->left  = left;
+        parent->right = right;
+        heap.push(parent);
+    }
+
+    return heap.top();
 }
 
-// Free allocated Huffman tree memory.
-static void freeTree(CNode *n) {
-    if (!n) return;
-    freeTree(n->l); freeTree(n->r);
-    delete n;
+static void freeTree(TreeNode *node) {
+    if (!node) return;
+    freeTree(node->left);
+    freeTree(node->right);
+    delete node;
 }
 
-// Traverse the tree and compute bit-length per symbol.
-static void getLen(CNode *n, int dep, int ln[256]) {
-    if (!n) return;
-    if (n->sym >= 0) {
-        ln[n->sym] = (dep == 0) ? 1 : dep; // Single-symbol alphabet still needs 1 bit.
+static void collectCodeLengths(TreeNode *node, int depth, int lengths[256]) {
+    if (!node) return;
+
+    if (node->symbol >= 0) {
+        lengths[node->symbol] = (depth == 0) ? 1 : depth;
         return;
     }
-    getLen(n->l, dep + 1, ln);
-    getLen(n->r, dep + 1, ln);
+
+    collectCodeLengths(node->left,  depth + 1, lengths);
+    collectCodeLengths(node->right, depth + 1, lengths);
 }
 
-// Build canonical Huffman codes from code lengths.
-static void mkCodes(int ln[256], unsigned int cd[256]) {
-    vector<pair<int,int>> sv;
-    for (int i = 0; i < 256; i++)
-        if (ln[i] > 0) sv.push_back({ln[i], i});
-    sort(sv.begin(), sv.end());
-
-    unsigned int c = 0;
-    int pl = 0;
-    for (auto &x : sv) {
-        int len = x.first, sym = x.second;
-        c <<= (len - pl); // Shift when moving to longer code lengths.
-        cd[sym] = c++;
-        pl = len;
-    }
-}
-
-    // Pack bytes into a bitstream (MSB first).
-static void encBits(const char *d, int dlen,
-                    int ln[256], unsigned int cd[256],
-                    vector<char> &pb, int &pad) {
-    int cur = 0, cnt = 0;
-    for (int i = 0; i < dlen; i++) {
-        int s = (unsigned char)d[i];
-        int len = ln[s];
-        unsigned int c = cd[s];
-        for (int b = len - 1; b >= 0; b--) {
-            cur = (cur << 1) | ((c >> b) & 1);
-            if (++cnt == 8) { pb.push_back((char)cur); cur = 0; cnt = 0; }
-        }
-    }
-    pad = 0;
-    if (cnt > 0) {
-        pad = 8 - cnt;
-        pb.push_back((char)(cur << pad)); // Pad remaining bits with zeros.
-    }
-}
-
-    // Write header format: [N][symbols][lengths][padding].
-static void wHdr(int ln[256], int pad, string &out) {
-    vector<int> sv;
-    for (int i = 0; i < 256; i++)
-        if (ln[i] > 0) sv.push_back(i);
-    int N = (int)sv.size();
-    out.push_back((char)N);
-    for (int i = 0; i < N; i++) out.push_back((char)sv[i]);
-    for (int i = 0; i < N; i++) out.push_back((char)ln[sv[i]]);
-    out.push_back((char)pad);
-}
-
-// Parse header and fill lengths/padding.
-static int rHdr(const string &s, int pos, int ln[256], int &pad) {
-    int st = pos;
-    int N = (unsigned char)s[pos++];
-    int sym[256] = {};
-    for (int i = 0; i < N; i++) sym[i] = (unsigned char)s[pos++];
-    for (int i = 0; i < N; i++) ln[sym[i]] = (unsigned char)s[pos++];
-    pad = (unsigned char)s[pos++];
-    return pos - st;
-}
-
-// Decode compressed bits back to original bytes.
-static string decBits(const string &s, int ds, int de,
-                       int pad, int ln[256], unsigned int cd[256]) {
-    unordered_map<unsigned int, int> tbl;
-    int mx = 0;
+static void buildCanonicalCodes(int lengths[256], unsigned int codes[256]) {
+    vector<pair<int, int>> symbolsByLength;
     for (int i = 0; i < 256; i++) {
-        if (ln[i] > 0) {
-            unsigned int k = (cd[i] << 5) | (unsigned int)ln[i];
-            tbl[k] = i;
-            if (ln[i] > mx) mx = ln[i];
+        if (lengths[i] > 0) {
+            symbolsByLength.push_back({lengths[i], i});
+        }
+    }
+    sort(symbolsByLength.begin(), symbolsByLength.end());
+
+    unsigned int code = 0;
+    int prevLength = 0;
+
+    for (auto &entry : symbolsByLength) {
+        int len = entry.first;
+        int sym = entry.second;
+
+        code <<= (len - prevLength);
+        codes[sym] = code;
+        code++;
+        prevLength = len;
+    }
+}
+
+static void encodeToBitstream(const char *input, int inputLen,int lengths[256], unsigned int codes[256],vector<char> &bitstream, int &paddingBits) {
+    int currentByte = 0;
+    int bitsInByte  = 0;
+
+    for (int i = 0; i < inputLen; i++) {
+        int sym  = (unsigned char)input[i];
+        int len  = lengths[sym];
+        unsigned int code = codes[sym];
+
+        for (int b = len - 1; b >= 0; b--) {
+            currentByte = (currentByte << 1) | ((code >> b) & 1);
+            bitsInByte++;
+
+            if (bitsInByte == 8) {
+                bitstream.push_back((char)currentByte);
+                currentByte = 0;
+                bitsInByte  = 0;
+            }
         }
     }
 
-    int tot = (de - ds) * 8 - pad; // Number of valid data bits.
-    int br = 0;
-    unsigned int buf = 0;
-    int bb = 0, si = ds;
-    string res;
+    paddingBits = 0;
+    if (bitsInByte > 0) {
+        paddingBits = 8 - bitsInByte;
+        bitstream.push_back((char)(currentByte << paddingBits));
+    }
+}
 
-    while (br < tot) {
-        // Load more bits into the decode buffer.
-        while (bb < mx && si < de) {
-            buf = (buf << 8) | (unsigned char)s[si++];
-            bb += 8;
+static string decodeFromBitstream(const string &data, int dataStart, int dataEnd,int paddingBits, int lengths[256], unsigned int codes[256]) {
+    unordered_map<unsigned int, int> lookup;
+    int maxLength = 0;
+
+    for (int i = 0; i < 256; i++) {
+        if (lengths[i] > 0) {
+            unsigned int key = (codes[i] << 5) | (unsigned int)lengths[i];
+            lookup[key] = i;
+            if (lengths[i] > maxLength) maxLength = lengths[i];
         }
-        bool ok = false;
-        int lim = (bb < mx) ? bb : mx;
-        for (int len = 1; len <= lim; len++) {
-            if (br + len > tot) break;
-            unsigned int cand = buf >> (bb - len);
-            unsigned int k = (cand << 5) | (unsigned int)len;
-            auto it = tbl.find(k);
-            if (it != tbl.end()) {
-                res.push_back((char)it->second);
-                bb -= len;
-                buf &= (1u << bb) - 1;
-                br += len;
-                ok = true;
+    }
+
+    int totalBits = (dataEnd - dataStart) * 8 - paddingBits;
+    int bitsRead  = 0;
+    unsigned int buffer = 0;
+    int bufferBits = 0;
+    int readPos = dataStart;
+    string result;
+
+    while (bitsRead < totalBits) {
+        while (bufferBits < maxLength && readPos < dataEnd) {
+            buffer = (buffer << 8) | (unsigned char)data[readPos++];
+            bufferBits += 8;
+        }
+
+        bool matched = false;
+        int tryLen = min(bufferBits, maxLength);
+
+        for (int len = 1; len <= tryLen; len++) {
+            if (bitsRead + len > totalBits) break;
+
+            unsigned int candidate = buffer >> (bufferBits - len);
+            unsigned int key = (candidate << 5) | (unsigned int)len;
+
+            auto it = lookup.find(key);
+            if (it != lookup.end()) {
+                result.push_back((char)it->second);
+                bufferBits -= len;
+                buffer &= (1u << bufferBits) - 1;
+                bitsRead += len;
+                matched = true;
                 break;
             }
         }
-        if (!ok) break; // No match found, likely corrupted data.
+
+        if (!matched) break;
     }
-    return res;
+
+    return result;
 }
 
-    // Compress complete input using a single Huffman model.
-string globalHuffmanCompress(const string &d) {
-    int fr[256] = {};
-    for (int i = 0; i < (int)d.size(); i++)
-        fr[(unsigned char)d[i]]++;
+static void writeBlockHeader(int lengths[256], int paddingBits, string &output) {
+    vector<int> symbols;
+    for (int i = 0; i < 256; i++) {
+        if (lengths[i] > 0) symbols.push_back(i);
+    }
 
-    CNode *root = buildTree(fr);
+    output.push_back((char)symbols.size());
+    for (int sym : symbols) output.push_back((char)sym);
+    for (int sym : symbols) output.push_back((char)lengths[sym]);
+    output.push_back((char)paddingBits);
+}
+
+static int readBlockHeader(const string &data, int pos, int lengths[256], int &paddingBits) {
+    if (pos >= (int)data.size()) return -1;
+
+    int startPos = pos;
+    int numSymbols = (unsigned char)data[pos++];
+
+    if (numSymbols < 0 || numSymbols > 256) return -1;
+    if (pos + numSymbols * 2 + 1 > (int)data.size()) return -1;
+
+    int symbols[256] = {};
+    for (int i = 0; i < numSymbols; i++) symbols[i] = (unsigned char)data[pos++];
+    for (int i = 0; i < numSymbols; i++) lengths[symbols[i]] = (unsigned char)data[pos++];
+
+    paddingBits = (unsigned char)data[pos++];
+    if (paddingBits > 7) return -1;
+
+    return pos - startPos;
+}
+
+static void writeInt32(string &output, int value) {
+    output.push_back((char)((value >> 24) & 0xFF));
+    output.push_back((char)((value >> 16) & 0xFF));
+    output.push_back((char)((value >>  8) & 0xFF));
+    output.push_back((char)( value        & 0xFF));
+}
+
+static int readInt32(const string &data, int pos) {
+    if (pos < 0 || pos + 3 >= (int)data.size()) return -1;
+    return ((unsigned char)data[pos]   << 24)
+         | ((unsigned char)data[pos+1] << 16)
+         | ((unsigned char)data[pos+2] <<  8)
+         |  (unsigned char)data[pos+3];
+}
+
+string globalHuffmanCompress(const string &input) {
+    int freq[256] = {};
+    for (unsigned char b : input) freq[b]++;
+
+    TreeNode *root = buildHuffmanTree(freq);
     if (!root) return "";
 
-    int ln[256] = {};
-    getLen(root, 0, ln);
+    int lengths[256] = {};
+    collectCodeLengths(root, 0, lengths);
     freeTree(root);
 
-    unsigned int cd[256] = {};
-    mkCodes(ln, cd);
+    unsigned int codes[256] = {};
+    buildCanonicalCodes(lengths, codes);
 
-    vector<char> pb;
-    int pad = 0;
-    encBits(d.data(), (int)d.size(), ln, cd, pb, pad);
+    vector<char> bitstream;
+    int paddingBits = 0;
+    encodeToBitstream(input.data(), (int)input.size(), lengths, codes, bitstream, paddingBits);
 
-    // 'G' marks global mode.
-    string out;
-    out.push_back('G');
-    wHdr(ln, pad, out);
-    for (char c : pb) out.push_back(c);
-    return out;
+    string output;
+    output.push_back('G');
+    writeBlockHeader(lengths, paddingBits, output);
+    for (char c : bitstream) output.push_back(c);
+
+    return output;
 }
 
-// Write 32-bit integer as 4 bytes (big-endian).
-static void wI32(string &out, int v) {
-    out.push_back((char)((v >> 24) & 0xFF));
-    out.push_back((char)((v >> 16) & 0xFF));
-    out.push_back((char)((v >>  8) & 0xFF));
-    out.push_back((char)( v        & 0xFF));
-}
+string blockSplitCompress(const string &input) {
+    int totalSize = (int)input.size();
+    int numBlocks = (totalSize + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-// Read 32-bit integer from 4 bytes (big-endian).
-static int rI32(const string &s, int p) {
-    return ((unsigned char)s[p]   << 24)
-         | ((unsigned char)s[p+1] << 16)
-         | ((unsigned char)s[p+2] <<  8)
-         |  (unsigned char)s[p+3];
-}
+    string output;
+    output.push_back('B');
+    writeInt32(output, numBlocks);
 
-// Split input into 32 KB blocks and compress each independently.
-string blockSplitCompress(const string &d) {
-    int n = (int)d.size();
-    int nb = (n + BLK_SZ - 1) / BLK_SZ; // Number of blocks.
+    for (int blockIndex = 0; blockIndex < numBlocks; blockIndex++) {
+        int blockStart  = blockIndex * BLOCK_SIZE;
+        int blockLength = min(BLOCK_SIZE, totalSize - blockStart);
 
-    string out;
-    out.push_back('B'); // 'B' marks block mode.
-    wI32(out, nb);
+        int freq[256] = {};
+        for (int i = blockStart; i < blockStart + blockLength; i++) {
+            freq[(unsigned char)input[i]]++;
+        }
 
-    for (int b = 0; b < nb; b++) {
-        int bs = b * BLK_SZ;
-        int bl = (bs + BLK_SZ <= n) ? BLK_SZ : (n - bs); // Last block can be shorter.
-
-        int fr[256] = {};
-        for (int i = bs; i < bs + bl; i++)
-            fr[(unsigned char)d[i]]++;
-
-        CNode *root = buildTree(fr);
-        int ln[256] = {};
-        getLen(root, 0, ln);
+        TreeNode *root = buildHuffmanTree(freq);
+        int lengths[256] = {};
+        collectCodeLengths(root, 0, lengths);
         freeTree(root);
 
-        unsigned int cd[256] = {};
-        mkCodes(ln, cd);
+        unsigned int codes[256] = {};
+        buildCanonicalCodes(lengths, codes);
 
-        vector<char> pb;
-        int pad = 0;
-        encBits(d.data() + bs, bl, ln, cd, pb, pad);
+        vector<char> bitstream;
+        int paddingBits = 0;
+        encodeToBitstream(input.data() + blockStart, blockLength,
+                          lengths, codes, bitstream, paddingBits);
 
-        string bk;
-        wHdr(ln, pad, bk);
-        for (char c : pb) bk.push_back(c);
+        string blockData;
+        writeBlockHeader(lengths, paddingBits, blockData);
+        for (char c : bitstream) blockData.push_back(c);
 
-        wI32(out, (int)bk.size());
-        out += bk;
-    }
-    return out;
-}
-
-// Compress by selecting the best strategy for current input.
-BlockResult blockHuffmanCompress(const string &d) {
-    if (d.empty()) return {"", {}};
-
-    // Fast path: all bytes are identical.
-    {
-        bool same = true;
-        for (int i = 1; i < (int)d.size(); i++)
-            if (d[i] != d[0]) { same = false; break; }
-        if (same) {
-            // Single symbol stream: a 1-bit code is sufficient.
-            string out;
-            out.push_back('G');
-            int ln[256] = {};
-            ln[(unsigned char)d[0]] = 1;
-            unsigned int cd[256] = {};
-            vector<char> pb;
-            int pad = 0;
-            encBits(d.data(), (int)d.size(), ln, cd, pb, pad);
-            wHdr(ln, pad, out);
-            for (char c : pb) out.push_back(c);
-            return {out, {}};
-        }
+        writeInt32(output, (int)blockData.size());
+        output += blockData;
     }
 
-    int n = (int)d.size();
-
-    // Small input: global mode is usually better.
-    if (n < SML_THRESH)
-        return {globalHuffmanCompress(d), {}};
-
-    // Try both and keep the smaller output.
-    string g = globalHuffmanCompress(d);
-    string bk = blockSplitCompress(d);
-
-    if ((int)g.size() <= (int)bk.size())
-        return {g, {}};
-    return {bk, {}};
+    return output;
 }
 
-// Decompress by reading mode from the first byte.
-string blockHuffmanDecompress(const string &enc,
+BlockResult blockHuffmanCompress(const string &input) {
+    if (input.empty()) return {"", {}};
+
+    bool allSame = true;
+    for (int i = 1; i < (int)input.size(); i++) {
+        if (input[i] != input[0]) { allSame = false; break; }
+    }
+
+    if (allSame) {
+        int lengths[256] = {};
+        lengths[(unsigned char)input[0]] = 1;
+        unsigned int codes[256] = {};
+
+        vector<char> bitstream;
+        int paddingBits = 0;
+        encodeToBitstream(input.data(), (int)input.size(), lengths, codes, bitstream, paddingBits);
+
+        string output;
+        output.push_back('G');
+        writeBlockHeader(lengths, paddingBits, output);
+        for (char c : bitstream) output.push_back(c);
+        return {output, {}};
+    }
+
+    if ((int)input.size() < SMALL_FILE_THRESHOLD) {
+        return {globalHuffmanCompress(input), {}};
+    }
+
+    string globalResult = globalHuffmanCompress(input);
+    string blockResult  = blockSplitCompress(input);
+
+    if ((int)globalResult.size() <= (int)blockResult.size()) {
+        return {globalResult, {}};
+    }
+    return {blockResult, {}};
+}
+
+string blockHuffmanDecompress(const string &encoded,
                                const unordered_map<string, string> &) {
-    if (enc.empty()) return "";
+    if (encoded.empty()) return "";
 
-    char mode = enc[0]; // 'G' or 'B'
+    char mode = encoded[0];
 
     if (mode == 'G') {
         int pos = 1;
-        int ln[256] = {};
-        int pad = 0;
-        int used = rHdr(enc, pos, ln, pad);
-        int dstart = pos + used;
+        int lengths[256] = {};
+        int paddingBits = 0;
 
-        unsigned int cd[256] = {};
-        mkCodes(ln, cd);
+        int headerSize = readBlockHeader(encoded, pos, lengths, paddingBits);
+        if (headerSize <= 0) return "";
 
-        // Single-symbol edge case.
-        int N = (unsigned char)enc[1];
-        if (N == 1) {
-            int sym = (unsigned char)enc[2];
-            int p   = (unsigned char)enc[4];
-            int tb  = ((int)enc.size() - dstart) * 8 - p;
-            return string(tb, (char)sym);
+        int dataStart = pos + headerSize;
+        if (dataStart > (int)encoded.size()) return "";
+
+        unsigned int codes[256] = {};
+        buildCanonicalCodes(lengths, codes);
+
+        int numSymbols = (unsigned char)encoded[1];
+        if (numSymbols == 1) {
+            int sym = (unsigned char)encoded[2];
+            int pad = (unsigned char)encoded[4];
+            int totalBits = ((int)encoded.size() - dataStart) * 8 - pad;
+            if (totalBits < 0) return "";
+            return string(totalBits, (char)sym);
         }
 
-        return decBits(enc, dstart, (int)enc.size(), pad, ln, cd);
+        return decodeFromBitstream(encoded, dataStart, (int)encoded.size(), paddingBits, lengths, codes);
     }
 
     if (mode == 'B') {
         int pos = 1;
-        int nb = rI32(enc, pos); pos += 4;
-        string res;
+        int numBlocks = readInt32(encoded, pos);
+        pos += 4;
 
-        for (int b = 0; b < nb; b++) {
-            int bsz = rI32(enc, pos); pos += 4;
-            int bend = pos + bsz;
+        if (numBlocks < 0) return "";
 
-            int ln[256] = {};
-            int pad = 0;
-            int used = rHdr(enc, pos, ln, pad);
-            int dstart = pos + used;
+        string result;
 
-            unsigned int cd[256] = {};
-            mkCodes(ln, cd);
+        for (int b = 0; b < numBlocks; b++) {
+            int blockSize = readInt32(encoded, pos);
+            pos += 4;
 
-            res += decBits(enc, dstart, bend, pad, ln, cd);
-            pos = bend;
+            if (blockSize < 0) return "";
+
+            int blockEnd = pos + blockSize;
+            if (blockEnd > (int)encoded.size()) return "";
+
+            int lengths[256] = {};
+            int paddingBits = 0;
+
+            int headerSize = readBlockHeader(encoded, pos, lengths, paddingBits);
+            if (headerSize <= 0) return "";
+
+            int dataStart = pos + headerSize;
+            if (dataStart > blockEnd) return "";
+
+            unsigned int codes[256] = {};
+            buildCanonicalCodes(lengths, codes);
+
+            result += decodeFromBitstream(encoded, dataStart, blockEnd, paddingBits, lengths, codes);
+            pos = blockEnd;
         }
-        return res;
+
+        return result;
     }
 
-    return ""; // Unknown mode.
+    return "";
 }

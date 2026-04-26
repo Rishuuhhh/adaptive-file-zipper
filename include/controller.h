@@ -2,18 +2,24 @@
 #define CONTROLLER_H
 
 #include <string>
-
+using namespace std;
 struct CompressionResult {
-    std::string method;
+    string method;
     double entropy;
     double adaptiveRatio;
     double huffmanRatio;
     double timeTaken;
-    std::string compressedData;
+    string compressedData;
+    string originalFilename;
 };
 
-CompressionResult runAdaptiveCompression(const std::string &data);
+struct DecompressionResult {
+    string data;
+    string originalFilename;
+};
 
-std::string runDecompression(const std::string &packedData);
+CompressionResult runAdaptiveCompression(const  string &data,const  string &originalFilename = "");
+
+DecompressionResult runDecompression(const  string &packedData);
 
 #endif

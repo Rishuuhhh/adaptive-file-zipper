@@ -1,21 +1,24 @@
 #include "entropy.h"
-#include <unordered_map>
 #include <cmath>
+#include <unordered_map>
 
 using namespace std;
 
-// Count byte frequencies, then compute Shannon entropy.
-double calculateEntropy(const string &d) {
-    if (d.empty()) return 0.0;
+double calculateEntropy(const string &fileBytes) {
+    if (fileBytes.empty()) return 0.0;
 
-    unordered_map<char, int> fr;
-    for (char c : d) fr[c]++;
-
-    double h = 0.0;
-    int n = d.size();
-    for (auto &p : fr) {
-        double prob = (double)p.second / n;
-        h -= prob * log2(prob);
+    unordered_map<unsigned char, int> freq;
+    for (unsigned char b : fileBytes) {
+        freq[b]++;
     }
-    return h;
+
+    double entropy = 0.0;
+    double totalBytes = static_cast<double>(fileBytes.size());
+
+    for (auto &pair : freq) {
+        double probability = pair.second / totalBytes;
+        entropy -= probability * log2(probability);
+    }
+
+    return entropy;
 }

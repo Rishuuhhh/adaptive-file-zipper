@@ -9,7 +9,6 @@
 #include <cmath>
 #include <algorithm>
 #include <string>
-#include <sstream>
 
 // Entropy should be 0 for empty input.
 TEST(Entropy, EmptyInputReturnsZero) {
@@ -41,24 +40,17 @@ RC_GTEST_PROP(Entropy, UniformMaximizesEntropy, ()) {
 }
 
 // RLE output format should be valid.
+// The actual RLE format is binary: each run is a 3-byte record [char][countHigh][countLow].
 RC_GTEST_PROP(RLE, OutputFormatIsWellFormed, ()) {
     auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
     std::string c = rleCompress(in);
     RC_ASSERT(!c.empty());
-    RC_ASSERT(c.back() != ';');
-
-    std::string tok;
-    std::istringstream ss(c);
-    while (std::getline(ss, tok, ';')) {
-        int pc = (int)std::count(tok.begin(), tok.end(), '|');
-        RC_ASSERT(pc == 1);
-        auto p = tok.find('|');
-        RC_ASSERT(p != std::string::npos);
-        std::string cs = tok.substr(p + 1);
-        RC_ASSERT(!cs.empty());
-        for (char ch : cs)
-            RC_ASSERT(std::isdigit((unsigned char)ch));
-        RC_ASSERT(std::stoi(cs) > 0);
+    // Output length must be a multiple of 3 (each run = 3 bytes).
+    RC_ASSERT(c.size() % 3 == 0);
+    // Each 3-byte record must have a positive run count.
+    for (size_t i = 0; i + 2 < c.size(); i += 3) {
+        int runLen = ((unsigned char)c[i + 1] << 8) | (unsigned char)c[i + 2];
+        RC_ASSERT(runLen > 0);
     }
 }
 
@@ -68,13 +60,15 @@ RC_GTEST_PROP(RLE, RoundTrip, ()) {
     RC_ASSERT(rleDecompress(rleCompress(in)) == in);
 }
 
-// Block Huffman output should be a valid bit string.
+// Block Huffman output should be non-empty packed binary (not a text bit string).
+// The encoded field contains a binary-packed bitstream with a header byte ('G' or 'B').
 RC_GTEST_PROP(BlockHuffman, OutputIsValidBitString, ()) {
     auto in = *rc::gen::nonEmpty(rc::gen::arbitrary<std::string>());
     BlockResult r = blockHuffmanCompress(in);
-    for (char c : r.encoded)
-        RC_ASSERT(c == '0' || c == '1');
-    RC_ASSERT(!r.codeMap.empty());
+    RC_ASSERT(!r.encoded.empty());
+    // First byte must be 'G' (global mode) or 'B' (block-split mode).
+    char mode = r.encoded[0];
+    RC_ASSERT(mode == 'G' || mode == 'B');
 }
 
 // Block Huffman round-trip.
@@ -90,11 +84,12 @@ TEST(Controller, EmptyInputReturnsNone) {
     EXPECT_EQ(r.method, "NONE");
     EXPECT_DOUBLE_EQ(r.entropy, 0.0);
     EXPECT_DOUBLE_EQ(r.adaptiveRatio, 1.0);
-    EXPECT_TRUE(r.compressedData.empty());
+    // compressedData is a valid serialized blob (not empty) so it can round-trip.
+    EXPECT_FALSE(r.compressedData.empty());
 }
 
-// Unknown method should return an empty output.
-TEST(Controller, UnknownMethodReturnsEmpty) {
+// Unknown method should throw std::runtime_error.
+TEST(Controller, UnknownMethodThrows) {
     std::string pk = packData("UNKNOWN", 0.0, "", "some payload");
-    EXPECT_EQ(runDecompression(pk), "");
+    EXPECT_THROW(runDecompression(pk), std::runtime_error);
 }

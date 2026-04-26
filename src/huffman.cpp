@@ -4,111 +4,149 @@
 
 using namespace std;
 
-// Huffman tree node.
-struct HNode {
-    int sym; // -1 = internal, 0-255 = leaf
-    int frq;
-    HNode *l, *r;
-    HNode(int s, int f) : sym(s), frq(f), l(0), r(0) {}
+struct HuffNode {
+    int symbol;
+    int frequency;
+    HuffNode *left;
+    HuffNode *right;
+
+    HuffNode(int sym, int freq) : symbol(sym), frequency(freq), left(nullptr), right(nullptr) {}
 };
 
-struct HCmp {
-    bool operator()(HNode *a, HNode *b) const { return a->frq > b->frq; }
+struct MinFrequency {
+    bool operator()(HuffNode *a, HuffNode *b) const {
+        return a->frequency > b->frequency;
+    }
 };
 
-// Traverse the tree and build symbol codes.
-static void getCodes(HNode *n, string &pre, unordered_map<int, string> &out) {
-    if (!n) return;
-    if (!n->l && !n->r) {
-        out[n->sym] = pre.empty() ? "0" : pre;
+static void freeTree(HuffNode *node) {
+    if (!node) return;
+    freeTree(node->left);
+    freeTree(node->right);
+    delete node;
+}
+
+static void buildCodes(HuffNode *node, string &prefix,
+                       unordered_map<int, string> &codes) {
+    if (!node) return;
+
+    if (!node->left && !node->right) {
+        codes[node->symbol] = prefix.empty() ? "0" : prefix;
         return;
     }
-    pre.push_back('0'); getCodes(n->l, pre, out); pre.pop_back();
-    pre.push_back('1'); getCodes(n->r, pre, out); pre.pop_back();
+
+    prefix.push_back('0');
+    buildCodes(node->left, prefix, codes);
+    prefix.pop_back();
+
+    prefix.push_back('1');
+    buildCodes(node->right, prefix, codes);
+    prefix.pop_back();
 }
 
-static void freeTree(HNode *n) {
-    if (!n) return;
-    freeTree(n->l); freeTree(n->r);
-    delete n;
-}
+static string packBitString(const string &bits) {
+    int padding = (8 - (int)bits.size() % 8) % 8;
 
-// Pack bit string into bytes; first byte stores padding count.
-static string packBits(const string &bits) {
-    int pad = (8 - (int)bits.size() % 8) % 8;
-    string out;
-    out.push_back((char)pad);
-    int cur = 0, cnt = 0;
-    for (char b : bits) {
-        cur = (cur << 1) | (b == '1' ? 1 : 0);
-        if (++cnt == 8) { out.push_back((char)cur); cur = 0; cnt = 0; }
+    string packed;
+    packed.push_back((char)padding);
+
+    int currentByte = 0;
+    int bitsInByte  = 0;
+
+    for (char bit : bits) {
+        currentByte = (currentByte << 1) | (bit == '1' ? 1 : 0);
+        bitsInByte++;
+
+        if (bitsInByte == 8) {
+            packed.push_back((char)currentByte);
+            currentByte = 0;
+            bitsInByte  = 0;
+        }
     }
-    if (cnt > 0) out.push_back((char)(cur << pad));
-    return out;
+
+    if (bitsInByte > 0) {
+        packed.push_back((char)(currentByte << padding));
+    }
+
+    return packed;
 }
 
-// Reconstruct bit string from packed bytes.
-static string unpackBits(const string &pk) {
-    if (pk.empty()) return "";
-    int pad = (unsigned char)pk[0];
+static string unpackBitString(const string &packed) {
+    if (packed.empty()) return "";
+
+    int padding = (unsigned char)packed[0];
+    if (padding > 7) return "";
+
     string bits;
-    int n = (int)pk.size();
-    for (int i = 1; i < n; i++) {
-        int by = (unsigned char)pk[i];
-        int valid = (i == n - 1) ? (8 - pad) : 8;
-        for (int b = 7; b >= 8 - valid; b--)
-            bits.push_back((by >> b) & 1 ? '1' : '0');
+
+    for (int i = 1; i < (int)packed.size(); i++) {
+        int byte = (unsigned char)packed[i];
+        int validBits = (i == (int)packed.size() - 1) ? (8 - padding) : 8;
+
+        for (int b = 7; b >= 8 - validBits; b--) {
+            bits.push_back((byte >> b) & 1 ? '1' : '0');
+        }
     }
+
     return bits;
 }
 
-HuffmanResult huffmanCompress(const string &d) {
-    if (d.empty()) return {"", {}};
+HuffmanResult huffmanCompress(const string &input) {
+    if (input.empty()) return {"", {}};
 
-    int fr[256] = {};
-    for (int i = 0; i < (int)d.size(); i++)
-        fr[(unsigned char)d[i]]++;
+    int freq[256] = {};
+    for (unsigned char b : input) freq[b]++;
 
-    priority_queue<HNode*, vector<HNode*>, HCmp> pq;
-    for (int i = 0; i < 256; i++)
-        if (fr[i] > 0) pq.push(new HNode(i, fr[i]));
-
-    while ((int)pq.size() > 1) {
-        HNode *a = pq.top(); pq.pop();
-        HNode *b = pq.top(); pq.pop();
-        HNode *p = new HNode(-1, a->frq + b->frq);
-        p->l = a; p->r = b;
-        pq.push(p);
+    priority_queue<HuffNode*, vector<HuffNode*>, MinFrequency> heap;
+    for (int i = 0; i < 256; i++) {
+        if (freq[i] > 0) heap.push(new HuffNode(i, freq[i]));
     }
 
-    HNode *root = pq.top();
+    while (heap.size() > 1) {
+        HuffNode *left  = heap.top(); heap.pop();
+        HuffNode *right = heap.top(); heap.pop();
+
+        HuffNode *parent = new HuffNode(-1, left->frequency + right->frequency);
+        parent->left  = left;
+        parent->right = right;
+        heap.push(parent);
+    }
+
+    HuffNode *root = heap.top();
+
     unordered_map<int, string> codes;
-    string pre;
-    getCodes(root, pre, codes);
+    string prefix;
+    buildCodes(root, prefix, codes);
     freeTree(root);
 
-    string bits;
-    for (int i = 0; i < (int)d.size(); i++)
-        bits += codes[(unsigned char)d[i]];
+    string bitString;
+    for (unsigned char b : input) {
+        bitString += codes[b];
+    }
 
-    return {packBits(bits), codes};
+    return {packBitString(bitString), codes};
 }
 
-string huffmanDecompress(const string &enc, const unordered_map<int, string> &cm) {
-    if (enc.empty()) return "";
+string huffmanDecompress(const string &encoded, const unordered_map<int, string> &codes) {
+    if (encoded.empty() || codes.empty()) return "";
 
-    unordered_map<string, int> rev;
-    for (auto &kv : cm) rev[kv.second] = kv.first;
+    unordered_map<string, int> reverseMap;
+    for (const auto &entry : codes) {
+        reverseMap[entry.second] = entry.first;
+    }
 
-    string bits = unpackBits(enc);
-    string res, cur;
-    for (char b : bits) {
-        cur.push_back(b);
-        auto it = rev.find(cur);
-        if (it != rev.end()) {
-            res.push_back((char)it->second);
-            cur.clear();
+    string bits = unpackBitString(encoded);
+    string result;
+    string current;
+
+    for (char bit : bits) {
+        current.push_back(bit);
+        auto it = reverseMap.find(current);
+        if (it != reverseMap.end()) {
+            result.push_back((char)it->second);
+            current.clear();
         }
     }
-    return res;
+
+    return result;
 }
