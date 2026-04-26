@@ -1,6 +1,7 @@
 #include "file_io.h"
 #include <fstream>
 #include <sstream>
+#include <iomanip>
 
 using namespace std;
 
@@ -22,8 +23,8 @@ void writeFile(const string &fn, const string &d) {
 string serializeCodeMap(const unordered_map<string, string> &cm) {
     string res;
     for (auto &e : cm) {
-        int kl = (int)e.first.size();
-        int vl = (int)e.second.size();
+        size_t kl = e.first.size();
+        size_t vl = e.second.size();
         res += to_string(kl) + ":" + e.first + " "
              + to_string(vl) + ":" + e.second + "\n";
     }
@@ -33,23 +34,29 @@ string serializeCodeMap(const unordered_map<string, string> &cm) {
 // Rebuild codeMap from serialized text.
 unordered_map<string, string> deserializeCodeMap(const string &s) {
     unordered_map<string, string> cm;
-    int pos = 0, n = (int)s.size();
+    size_t pos = 0, n = s.size();
 
     while (pos < n) {
-        int cl = (int)s.find(':', pos);
-        if (cl == (int)string::npos) break;
+        size_t cl = s.find(':', pos);
+        if (cl == string::npos) break;
+        if (cl >= n) break;
         int kl = stoi(s.substr(pos, cl - pos));
+        if (kl < 0) break;
         pos = cl + 1;
+        if (pos + kl > n) break;  // Bounds check before substr
         string k = s.substr(pos, kl);
         pos += kl;
 
         if (pos >= n || s[pos] != ' ') break;
         pos++;
 
-        cl = (int)s.find(':', pos);
-        if (cl == (int)string::npos) break;
+        cl = s.find(':', pos);
+        if (cl == string::npos) break;
+        if (cl >= n) break;
         int vl = stoi(s.substr(pos, cl - pos));
+        if (vl < 0) break;
         pos = cl + 1;
+        if (pos + vl > n) break;  // Bounds check before substr
         string v = s.substr(pos, vl);
         pos += vl;
 
@@ -62,8 +69,10 @@ unordered_map<string, string> deserializeCodeMap(const string &s) {
 // Pack compressed payload with metadata header.
 string packData(const string &meth, double ent,
                 const string &cms, const string &pay) {
+    ostringstream oss;
+    oss << setprecision(17) << ent;  // Full double precision
     return meth + "\n"
-         + to_string(ent) + "\n"
+         + oss.str() + "\n"
          + to_string((int)cms.size()) + "\n"
          + cms
          + pay;
@@ -72,23 +81,30 @@ string packData(const string &meth, double ent,
 // Unpack method, entropy, codemap, and payload from packed data.
 void unpackData(const string &in, string &meth, double &ent,
                 string &cms, string &pay) {
-    int pos = 0, n = (int)in.size();
+    size_t pos = 0, n = in.size();
 
-    int nl = (int)in.find('\n', pos);
-    if (nl == (int)string::npos) return;
+    size_t nl = in.find('\n', pos);
+    if (nl == string::npos) return;
     meth = in.substr(pos, nl - pos);
     pos = nl + 1;
+    if (pos > n) return;
 
-    nl = (int)in.find('\n', pos);
-    if (nl == (int)string::npos) return;
+    nl = in.find('\n', pos);
+    if (nl == string::npos) return;
+    if (nl >= n) return;
     ent = stod(in.substr(pos, nl - pos));
     pos = nl + 1;
+    if (pos > n) return;
 
-    nl = (int)in.find('\n', pos);
-    if (nl == (int)string::npos) return;
+    nl = in.find('\n', pos);
+    if (nl == string::npos) return;
+    if (nl >= n) return;
     int cml = stoi(in.substr(pos, nl - pos));
+    if (cml < 0) return;
     pos = nl + 1;
+    if (pos > n) return;
 
+    if (pos + (size_t)cml > n) return;  // Bounds check before substr
     cms = in.substr(pos, cml);
     pos += cml;
 
