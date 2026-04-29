@@ -12,13 +12,20 @@ body {
 }
 
 .container {
-    max-width: 520px;
+    max-width: 540px;
     margin: 0 auto;
 }
 
 h1 {
     font-size: 1.6rem;
     margin-bottom: 4px;
+}
+
+h2 {
+    font-size: 1rem;
+    font-weight: bold;
+    margin-bottom: 12px;
+    color: #333;
 }
 
 .subtitle {
@@ -129,6 +136,46 @@ button:disabled {
     padding: 16px;
 }
 
+.size-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 14px;
+    background: #f9f9f9;
+    border: 1px solid #e8e8e8;
+    border-radius: 6px;
+}
+
+.size-box {
+    flex: 1;
+    text-align: center;
+}
+
+.size-label {
+    font-size: 0.75rem;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+
+.size-value {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #222;
+}
+
+.size-value.highlight {
+    color: #1a7a1a;
+}
+
+.size-arrow {
+    color: #aaa;
+    font-size: 1.2rem;
+    flex: 0;
+}
+
 table {
     width: 100%;
     border-collapse: collapse;
@@ -136,19 +183,20 @@ table {
 }
 
 td {
-    padding: 6px 8px;
+    padding: 7px 8px;
     border-bottom: 1px solid #eee;
 }
 
 td:first-child {
     color: #666;
-    width: 140px;
+    width: 150px;
 }
 
 .note {
-    margin-top: 10px;
+    margin-top: 12px;
     font-size: 0.82rem;
     color: #888;
+    line-height: 1.5;
 }
 
 .hidden {

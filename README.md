@@ -1,80 +1,58 @@
 # Adaptive File Zipper
 
-This project is used to compress the text files as well as binary files you can download it and decompress the file. It uses adaptive algorithm.
-It has three layers:
+A file compression tool with a C++ compression engine, a Node.js backend, and a browser-based frontend.
 
-1. C++ core for compression/decompression logic
-2. Node.js backend that calls the C++ binary
-3. Browser frontend for easy upload/download usage
+The compressor tries three algorithms on every file and keeps whichever produces the smallest output:
+- **RLE** — good for files with long repeated byte sequences
+- **Global Huffman** — one Huffman tree for the whole file
+- **Block Huffman** — separate Huffman tree per 32 KB block, better for mixed-content files
 
-## How Compression Is Chosen
+If the file is already compressed (JPEG, MP3, ZIP, etc.) or contains near-random data, it is stored as-is to avoid making it larger.
 
-For each input file, the controller tries multiple methods and picks the best result:
-
-1. `RLE` for repeated bytes
-2. `GLOBAL_HUFF` with one Huffman model for the full file
-3. `BLOCK_HUFF` with per-block Huffman models
-
-If entropy is very high (near-random data), it stores data as `NONE` to avoid useless compression work.
+---
 
 ## Requirements
 
-1. macOS or Linux
-2. g++ with C++17 support
-3. Node.js 18+
+- macOS or Linux
+- g++ with C++17 support (`xcode-select --install` on macOS)
+- Node.js 18+
 
-On macOS you can install compiler tools with:
-
-```bash
-xcode-select --install
-```
+---
 
 ## Setup
 
-### 1. Build the C++ binary
-
+**1. Build the C++ binary**
 ```bash
 make build
 ```
 
-### 2. Install backend dependencies
-
+**2. Install backend dependencies**
 ```bash
-cd backend
-npm install
+cd backend && npm install
 ```
 
-### 3. Run the backend
-
+**3. Start the server**
 ```bash
-cd backend
-npm start
+cd backend && npm start
 ```
 
-Server starts on `http://localhost:3000`.
+Open `http://localhost:3000` in your browser.
 
-### 4. Open the app
+> Do not open `frontend/index.html` directly — the API calls need the backend server running.
 
-Open `http://localhost:3000` in browser.
-
-Note:
-Do not open `frontend/index.html` directly with `file://` because API calls need the backend server.
+---
 
 ## CLI Usage
 
-### Compress
-
 ```bash
+# Compress a file
 ./zipper compress input.txt output.z
-```
 
-### Decompress
-
-```bash
+# Decompress a .z file
 ./zipper decompress output.z recovered.txt
 ```
 
-The compress command prints JSON stats like:
+The compress command prints JSON stats to stdout:
 
 ```json
 {
@@ -82,52 +60,65 @@ The compress command prints JSON stats like:
   "adaptiveMethod": "GLOBAL_HUFF",
   "adaptiveRatio": 0.490,
   "huffmanRatio": 0.482,
-  "time": 0.55
+  "time": 0.55,
+  "originalSize": 4096,
+  "compressedSize": 2007,
+  "originalFilename": "input.txt"
 }
 ```
 
-Meaning:
-1. `adaptiveRatio = compressedSize / originalSize` (lower is better)
-2. `huffmanRatio` is entropy-based theoretical estimate
+- `adaptiveRatio` = compressedSize / originalSize (lower is better)
+- `huffmanRatio` = theoretical lower bound based on Shannon entropy
+
+---
+
+## .z File Format
+
+Each `.z` file has a small text header followed by the compressed payload:
+
+```
+<method>\n
+<entropy>\n
+<codeMapLength>\n
+<originalFilename>\n
+<codeMap bytes>
+<payload bytes>
+```
+
+The original filename is stored in the header so decompression can restore the correct file extension automatically.
+
+---
 
 ## Method Tags
 
-| Tag | Meaning | Typical case |
-|---|---|---|
-| `RLE` | Run-Length Encoding | long repeated runs |
-| `GLOBAL_HUFF` | one Huffman model | consistent symbol distribution |
-| `BLOCK_HUFF` | block-wise Huffman | mixed-content files |
-| `NONE` | no compression | near-random input |
-
-## Huffman Header Layout
-
-Only used symbols are stored:
-
-```text
-[1 byte]  N = number of unique symbols
-[N bytes] symbol values
-[N bytes] code lengths
-[1 byte]  padding bits in final byte
-[rest]    bit-packed payload
-```
-
-## Useful Make Targets
-
-| Command | Purpose |
+| Tag | Description |
 |---|---|
-| `make build` | compile `zipper` binary |
-| `make clean` | remove generated build artifacts |
+| `RLE` | Run-Length Encoding |
+| `GLOBAL_HUFF` | Single Huffman tree for the whole file |
+| `BLOCK_HUFF` | Per-block Huffman (32 KB blocks) |
+| `NONE` | No compression (data stored as-is) |
+
+---
 
 ## Project Structure
 
-```text
-.
-├── src/                  # C++ implementation
-├── include/              # C++ headers
-├── backend/              # Express server
-├── frontend/             # browser client
-├── data/                 # uploaded temp files
-├── results/              # generated output files
-├── Makefile
-└── zipper                # compiled binary
 ```
+.
+├── src/           C++ source files
+├── include/       C++ headers
+├── backend/       Node.js Express server
+├── frontend/      Browser UI
+├── data/          Temporary upload directory
+├── results/       Temporary output directory
+├── Makefile
+└── zipper         Compiled binary
+```
+
+---
+
+## Make Targets
+
+| Command | Purpose |
+|---|---|
+| `make build` | Compile the zipper binary |
+| `make clean` | Remove build artifacts |

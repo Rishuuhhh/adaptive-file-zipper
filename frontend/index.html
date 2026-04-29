@@ -10,7 +10,7 @@
 
 <div class="container">
     <h1>File Zipper</h1>
-    <p class="subtitle">Compress and decompress files using adaptive encoding</p>
+    <p class="subtitle">Compress and decompress any file using adaptive encoding</p>
 
     <div class="box">
         <input type="file" id="fileInput">
@@ -31,15 +31,34 @@
     </div>
 
     <div id="stats" class="hidden">
+        <h2>Compression Results</h2>
+
+        <div class="size-row">
+            <div class="size-box">
+                <div class="size-label">Original</div>
+                <div class="size-value" id="origSize">—</div>
+            </div>
+            <div class="size-arrow">→</div>
+            <div class="size-box">
+                <div class="size-label">Compressed</div>
+                <div class="size-value" id="compSize">—</div>
+            </div>
+            <div class="size-box highlight-box">
+                <div class="size-label">Saved</div>
+                <div class="size-value highlight" id="reduction">—</div>
+            </div>
+        </div>
+
         <table>
             <tr><td>Method</td><td id="method">—</td></tr>
             <tr><td>Entropy</td><td id="entropy">—</td></tr>
-            <tr><td>Original Size</td><td id="origSize">—</td></tr>
-            <tr><td>Compressed Size</td><td id="compSize">—</td></tr>
-            <tr><td>Reduction</td><td id="reduction">—</td></tr>
-            <tr><td>Time</td><td id="time">—</td></tr>
+            <tr><td>Huffman estimate</td><td id="huffman">—</td></tr>
+            <tr><td>Time taken</td><td id="time">—</td></tr>
         </table>
-        <p id="noneNote" class="hidden note">Note: File could not be compressed further (already compressed or random data).</p>
+
+        <p id="noneNote" class="hidden note">
+            This file could not be compressed further. It is likely already compressed (e.g. JPEG, MP3, ZIP) or contains near-random data.
+        </p>
     </div>
 
 </div>
