@@ -1,15 +1,34 @@
 #ifndef FILE_IO_H
 #define FILE_IO_H
+
 #include <string>
 #include <unordered_map>
-using namespace std;
- string readFile(const  string &filename);
-void writeFile(const  string &filename, const  string &data);
- string serializeCodeMap(const  unordered_map< string,  string> &codeMap);
- unordered_map< string,  string> deserializeCodeMap(const  string &serialized);
- string serializeCompressedData(const  string &method, double entropy, const  string &codeMapData, const  string &payload, const  string &originalFilename = "");
-void deserializeCompressedData(const  string &input,  string &method, double &entropy,  string &codeMapData, string &payload,  string &originalFilename);
-void deserializeCompressedData(const  string &input,  string &method, double &entropy,  string &codeMapData, string &payload);
- string packData(const  string &method, double entropy, const  string &codeMapData, const  string &payload);
-void unpackData(const  string &input,  string &method, double &entropy,  string &codeMapData, string &payload);
+
+std::string readFile(const std::string &filename);
+void writeFile(const std::string &filename, const std::string &data);
+
+std::string serializeCodeMap(const std::unordered_map<std::string, std::string> &codeMap);
+std::unordered_map<std::string, std::string> deserializeCodeMap(const std::string &serialized);
+
+std::string serializeCompressedData(const std::string &method, double entropy,
+                                    const std::string &codeMapData,
+                                    const std::string &payload,
+                                    const std::string &originalFilename = "");
+
+void deserializeCompressedData(const std::string &input, std::string &method,
+                               double &entropy, std::string &codeMapData,
+                               std::string &payload, std::string &originalFilename);
+
+void deserializeCompressedData(const std::string &input, std::string &method,
+                               double &entropy, std::string &codeMapData,
+                               std::string &payload);
+
+std::string packData(const std::string &method, double entropy,
+                     const std::string &codeMapData,
+                     const std::string &payload);
+
+void unpackData(const std::string &input, std::string &method,
+                double &entropy, std::string &codeMapData,
+                std::string &payload);
+
 #endif

@@ -1,109 +1,172 @@
 #include "file_io.h"
+#include <algorithm>
 #include <fstream>
 #include <sstream>
-#include <iomanip>
+#include <stdexcept>
 
 using namespace std;
 
-string readFile(const string &fn) {
-    ifstream f(fn, ios::binary);
-    if (!f.is_open()) return "";
-    stringstream buf;
-    buf << f.rdbuf();
-    return buf.str();
-}
-
-void writeFile(const string &fn, const string &d) {
-    ofstream f(fn, ios::binary);
-    if (f.is_open()) {
-        f << d;
+string readFile(const string &filename) {
+    ifstream file(filename, ios::binary);
+    if (!file.is_open()) {
+        throw runtime_error("Could not open file for reading: " + filename);
     }
+    stringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
 }
 
-string serializeCodeMap(const unordered_map<string, string> &cm) {
-    string res;
-    for (auto &e : cm) {
-        size_t kl = e.first.size();
-        size_t vl = e.second.size();
-        res += to_string(kl) + ":" + e.first + " "
-             + to_string(vl) + ":" + e.second + "\n";
+void writeFile(const string &filename, const string &content) {
+    ofstream file(filename, ios::binary);
+    if (!file.is_open()) {
+        throw runtime_error("Could not open file for writing: " + filename);
     }
-    return res;
+    file << content;
 }
 
-unordered_map<string, string> deserializeCodeMap(const string &s) {
-    unordered_map<string, string> cm;
-    size_t pos = 0, n = s.size();
-    while (pos < n) {
-        size_t cl = s.find(':', pos);
-        if (cl == string::npos) break;
-        
-        int kl = stoi(s.substr(pos, cl - pos));
-        pos = cl + 1;
-        if (pos + kl > n) break;
-        string k = s.substr(pos, kl);
-        pos += kl;
-
-        if (pos >= n || s[pos] != ' ') break;
-        pos++; // Skip space
-
-        cl = s.find(':', pos);
-        if (cl == string::npos) break;
-        
-        int vl = stoi(s.substr(pos, cl - pos));
-        pos = cl + 1;
-        if (pos + vl > n) break;
-        string v = s.substr(pos, vl);
-        pos += vl;
-
-        if (pos < n && s[pos] == '\n') pos++; // Skip newline
-        cm[k] = v;
+string serializeCodeMap(const unordered_map<string, string> &codeMap) {
+    string result;
+    for (const auto &entry : codeMap) {
+        result += to_string(entry.first.size()) + ":" + entry.first + " ";
+        result += to_string(entry.second.size()) + ":" + entry.second + "\n";
     }
-    return cm;
+    return result;
 }
 
-string packData(const string &meth, double ent,
-                const string &cms, const string &pay) {
-    ostringstream oss;
-    oss << setprecision(17) << ent;
-    return meth + "\n"
-         + oss.str() + "\n"
-         + to_string((int)cms.size()) + "\n"
-         + cms
-         + pay;
+unordered_map<string, string> deserializeCodeMap(const string &serialized) {
+    unordered_map<string, string> codeMap;
+    size_t pos = 0;
+
+    while (pos < serialized.size()) {
+        size_t colon = serialized.find(':', pos);
+        if (colon == string::npos) break;
+
+        int keyLen = stoi(serialized.substr(pos, colon - pos));
+        pos = colon + 1;
+        if (pos + keyLen > serialized.size()) break;
+
+        string key = serialized.substr(pos, keyLen);
+        pos += keyLen;
+
+        if (pos >= serialized.size() || serialized[pos] != ' ') break;
+        pos++;
+
+        colon = serialized.find(':', pos);
+        if (colon == string::npos) break;
+
+        int valLen = stoi(serialized.substr(pos, colon - pos));
+        pos = colon + 1;
+        if (pos + valLen > serialized.size()) break;
+
+        string value = serialized.substr(pos, valLen);
+        pos += valLen;
+
+        if (pos < serialized.size() && serialized[pos] == '\n') pos++;
+
+        codeMap[key] = value;
+    }
+
+    return codeMap;
 }
 
-void unpackData(const string &in, string &meth, double &ent,
-                string &cms, string &pay) {
-    size_t pos = 0, n = in.size();
-    
-    // Extract Method
-    size_t nl = in.find('\n', pos);
-    if (nl == string::npos) return;
-    meth = in.substr(pos, nl - pos);
-    pos = nl + 1;
-
-    // Extract Entropy
-    nl = in.find('\n', pos);
-    if (nl == string::npos) return;
-    ent = stod(in.substr(pos, nl - pos));
-    pos = nl + 1;
-
-    // Extract CodeMap Length
-    nl = in.find('\n', pos);
-    if (nl == string::npos) return;
-    int cml = stoi(in.substr(pos, nl - pos));
-    pos = nl + 1;
-
-    // Extract CodeMap Data and Payload
-    if (pos + (size_t)cml > n) return;
-    cms = in.substr(pos, cml);
-    pos += cml;
-    pay = in.substr(pos);
+static string sanitizeFilename(const string &name) {
+    string safe = name;
+    size_t lastSlash = safe.find_last_of("/\\");
+    if (lastSlash != string::npos) {
+        safe = safe.substr(lastSlash + 1);
+    }
+    while (!safe.empty() && safe[0] == '.') {
+        safe.erase(safe.begin());
+    }
+    safe.erase(remove(safe.begin(), safe.end(), '\n'), safe.end());
+    return safe;
 }
 
+string serializeCompressedData(const string &method, double entropy,
+                               const string &codeMapData,
+                               const string &payload,
+                               const string &originalFilename) {
+    string safeName = sanitizeFilename(originalFilename);
+    return method + "\n"
+         + to_string(entropy) + "\n"
+         + to_string((int)codeMapData.size()) + "\n"
+         + safeName + "\n"
+         + codeMapData
+         + payload;
+}
 
-void deserializeCompressedData(const string &input, string &method, double &entropy,
-                              string &codeMapData, string &payload) {
-    unpackData(input, method, entropy, codeMapData, payload);
+void deserializeCompressedData(const string &blob, string &method,
+                               double &entropy, string &codeMapData,
+                               string &payload, string &originalFilename) {
+    int pos = 0;
+    int blobSize = (int)blob.size();
+
+    auto readLine = [&](const string &fieldName) -> string {
+        int nl = (int)blob.find('\n', pos);
+        if (nl == (int)string::npos) {
+            throw runtime_error("Malformed .z file: missing " + fieldName);
+        }
+        string line = blob.substr(pos, nl - pos);
+        pos = nl + 1;
+        return line;
+    };
+
+    method = readLine("method tag");
+
+    string entropyStr = readLine("entropy");
+    if (entropyStr.empty()) {
+        throw runtime_error("Malformed .z file: entropy field is empty");
+    }
+    try {
+        entropy = stod(entropyStr);
+    } catch (...) {
+        throw runtime_error("Malformed .z file: entropy is not a number");
+    }
+
+    string codeMapLenStr = readLine("codeMapLength");
+    int codeMapLen = 0;
+    try {
+        codeMapLen = stoi(codeMapLenStr);
+    } catch (...) {
+        throw runtime_error("Malformed .z file: codeMapLength is not a number");
+    }
+    if (codeMapLen < 0) {
+        throw runtime_error("Malformed .z file: codeMapLength is negative");
+    }
+
+    originalFilename = "";
+    int filenameNewline = (int)blob.find('\n', pos);
+    if (filenameNewline != (int)string::npos) {
+        int afterFilename = filenameNewline + 1;
+        if (afterFilename + codeMapLen <= blobSize) {
+            originalFilename = blob.substr(pos, filenameNewline - pos);
+            pos = afterFilename;
+        }
+    }
+
+    if (pos + codeMapLen > blobSize) {
+        throw runtime_error("Malformed .z file: code map extends past end of file");
+    }
+    codeMapData = blob.substr(pos, codeMapLen);
+    pos += codeMapLen;
+
+    payload = blob.substr(pos);
+}
+
+void deserializeCompressedData(const string &input, string &method,
+                               double &entropy, string &codeMapData,
+                               string &payload) {
+    string ignored;
+    deserializeCompressedData(input, method, entropy, codeMapData, payload, ignored);
+}
+
+string packData(const string &method, double entropy,
+                const string &codeMapData, const string &payload) {
+    return serializeCompressedData(method, entropy, codeMapData, payload, "");
+}
+
+void unpackData(const string &input, string &method, double &entropy,
+                string &codeMapData, string &payload) {
+    string ignored;
+    deserializeCompressedData(input, method, entropy, codeMapData, payload, ignored);
 }
